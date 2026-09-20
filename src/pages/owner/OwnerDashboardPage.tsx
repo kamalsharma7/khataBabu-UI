@@ -16,8 +16,8 @@ export function OwnerDashboardPage() {
 
       {outlet && (
         <>
-          <section id="overview" className="card owner-overview-panel">
-            <h2>Overview</h2>
+          <section className="card owner-overview-panel">
+            <h2>Your outlet</h2>
             <dl className="owner-overview-dl">
               <div>
                 <dt>Business</dt>
@@ -43,9 +43,9 @@ export function OwnerDashboardPage() {
           </section>
 
           <div className="owner-quick-grid">
-            <Link to="/app#overview" className="owner-quick-card card">
+            <Link to="/app/overview" className="owner-quick-card card">
               <h2>Overview</h2>
-              <p className="muted">Outlet summary and account status at a glance.</p>
+              <p className="muted">Sales, collections, and orders — PIN protected for owners.</p>
               <span className="owner-quick-card__cta">View overview →</span>
             </Link>
             <Link to="/app/pos" className="owner-quick-card card owner-quick-card--highlight">

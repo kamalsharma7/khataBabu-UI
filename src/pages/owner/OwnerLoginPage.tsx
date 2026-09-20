@@ -2,11 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { OwnerApiError } from "../../api/ownerClient";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
-
-/** Match backend normalize_login_username (trim, lower, remove all spaces). */
-function normalizeOwnerUsername(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, "");
-}
+import { normalizeOwnerUsername } from "../../utils/ownerUsername";
 
 export function OwnerLoginPage() {
   const { profile, login } = useOwnerAuth();
@@ -28,7 +24,17 @@ export function OwnerLoginPage() {
       const me = await login(normalizeOwnerUsername(username), password.trim());
       navigate(me.must_change_password ? "/app/change-password" : "/app", { replace: true });
     } catch (err) {
-      setError(err instanceof OwnerApiError ? err.message : "Login failed");
+      if (err instanceof OwnerApiError) {
+        setError(err.message);
+      } else if (err instanceof TypeError) {
+        setError(
+          `Cannot reach the API (${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1"}). Start the backend and try again.`,
+        );
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Login failed");
+      }
     } finally {
       setSubmitting(false);
     }

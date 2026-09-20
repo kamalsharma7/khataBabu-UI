@@ -11,7 +11,7 @@ import {
 } from "../../api/owner";
 import { OwnerApiError } from "../../api/ownerClient";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
-import type { ResourceKind, VenueArea, VenueTable } from "../../types/owner";
+import type { AreaBillingMode, ResourceKind, VenueArea, VenueTable } from "../../types/owner";
 
 type AreaWithTables = VenueArea & { tables: VenueTable[] };
 
@@ -38,6 +38,10 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
   const [areaName, setAreaName] = useState("");
   const [areaTableCount, setAreaTableCount] = useState("");
   const [areaTablePrefix, setAreaTablePrefix] = useState("Table");
+  const [areaBillingMode, setAreaBillingMode] = useState<AreaBillingMode>("dine_in");
+  const [areaOpStart, setAreaOpStart] = useState("10:00");
+  const [areaOpEnd, setAreaOpEnd] = useState("23:00");
+  const [areaHourlyRate, setAreaHourlyRate] = useState("");
 
   const [bulkModal, setBulkModal] = useState<VenueArea | null>(null);
   const [bulkCount, setBulkCount] = useState("");
@@ -77,11 +81,19 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
     setAreaName("");
     setAreaTableCount("");
     setAreaTablePrefix("Table");
+    setAreaBillingMode("dine_in");
+    setAreaOpStart("10:00");
+    setAreaOpEnd("23:00");
+    setAreaHourlyRate("");
     setAreaModal("add");
   };
 
   const openEditArea = (area: VenueArea) => {
     setAreaName(area.name);
+    setAreaBillingMode(area.billing_mode ?? "dine_in");
+    setAreaOpStart(area.operating_start ?? "10:00");
+    setAreaOpEnd(area.operating_end ?? "23:00");
+    setAreaHourlyRate(area.hourly_rate ?? "");
     setAreaModal({ edit: area });
   };
 
@@ -89,19 +101,36 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
     e.preventDefault();
     if (!outlet || !areaModal) return;
     try {
+      const timePayload =
+        areaBillingMode === "time_based"
+          ? {
+              billing_mode: areaBillingMode,
+              operating_start: areaOpStart,
+              operating_end: areaOpEnd,
+              hourly_rate: parseFloat(areaHourlyRate),
+            }
+          : { billing_mode: areaBillingMode };
+
       if (areaModal === "add") {
         const count = areaTableCount.trim() ? parseInt(areaTableCount, 10) : undefined;
         await createArea(outlet.id, {
           name: areaName.trim(),
+          ...timePayload,
           ...(count != null && count > 0
             ? {
                 initial_table_count: count,
-                table_label_prefix: areaTablePrefix.trim() || "Table",
+                table_label_prefix:
+                  areaBillingMode === "time_based"
+                    ? areaTablePrefix.trim() || "Table"
+                    : areaTablePrefix.trim() || "Table",
               }
             : {}),
         });
       } else {
-        await updateArea(outlet.id, areaModal.edit.id, { name: areaName.trim() });
+        await updateArea(outlet.id, areaModal.edit.id, {
+          name: areaName.trim(),
+          ...timePayload,
+        });
       }
       setAreaModal(null);
       await load();
@@ -125,8 +154,9 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
     setTableModal({ areaId: area.id, areaName: area.name });
     setTableLabel("");
     setTableCapacity("");
-    setTableKind("dine_table");
-    setHourlyRate("");
+    const timeArea = area.billing_mode === "time_based";
+    setTableKind(timeArea ? "time_based" : "dine_table");
+    setHourlyRate(timeArea && area.hourly_rate ? area.hourly_rate : "");
   };
 
   const saveTable = async (e: FormEvent) => {
@@ -229,21 +259,40 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
         <section key={area.id} className="floor-section">
           <div className="floor-section__head">
             <h2 className="floor-section__title">{area.name}</h2>
-            <div className="floor-section__tools">
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openAddTable(area)}>
-                + Add table
+            <div className="floor-tool-group">
+              <button type="button" className="floor-tool-btn" onClick={() => openAddTable(area)}>
+                <span className="floor-tool-btn__icon">＋</span>
+                <span>Add table</span>
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openBulkTables(area)}>
-                Generate tables
+              <button type="button" className="floor-tool-btn" onClick={() => openBulkTables(area)}>
+                <span className="floor-tool-btn__icon">▦</span>
+                <span>Generate</span>
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditArea(area)}>
-                Rename
+              <button type="button" className="floor-tool-btn" onClick={() => openEditArea(area)}>
+                <span className="floor-tool-btn__icon">✎</span>
+                <span>Settings</span>
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeArea(area)}>
-                Delete area
+              <button
+                type="button"
+                className="floor-tool-btn floor-tool-btn--danger"
+                onClick={() => removeArea(area)}
+              >
+                <span className="floor-tool-btn__icon">⌫</span>
+                <span>Delete</span>
               </button>
             </div>
           </div>
+          {(area.billing_mode ?? "dine_in") === "time_based" && (
+            <div className="floor-time-band">
+              <span className="floor-time-band__label">Time allotment</span>
+              <span className="floor-time-band__value">
+                {area.operating_start ?? "—"} – {area.operating_end ?? "—"}
+              </span>
+              {area.hourly_rate && (
+                <span className="floor-time-band__rate">₹{area.hourly_rate} / hour (area default)</span>
+              )}
+            </div>
+          )}
           {area.tables.length === 0 ? (
             <p className="muted floor-empty">No tables in this area.</p>
           ) : (
@@ -278,12 +327,58 @@ export function OwnerFloorPage({ embedded = false }: OwnerFloorPageProps = {}) {
       {areaModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <form className="modal card" onSubmit={saveArea}>
-            <h2>{areaModal === "add" ? "New area" : "Rename area"}</h2>
+            <h2>{areaModal === "add" ? "New area" : "Area settings"}</h2>
             <p className="muted">e.g. AC, Non AC, Garden, Snooker, Private room</p>
             <label className="field">
               <span>Area name</span>
               <input value={areaName} onChange={(e) => setAreaName(e.target.value)} required autoFocus />
             </label>
+            <label className="field">
+              <span>Billing type</span>
+              <select
+                value={areaBillingMode}
+                onChange={(e) => setAreaBillingMode(e.target.value as AreaBillingMode)}
+              >
+                <option value="dine_in">Dining tables</option>
+                <option value="time_based">Time-based (snooker, games, etc.)</option>
+              </select>
+            </label>
+            {areaBillingMode === "time_based" && (
+              <div className="floor-time-fields card">
+                <p className="muted">Operating window and default hourly rate for tables in this area.</p>
+                <div className="floor-time-fields__row">
+                  <label className="field">
+                    <span>Start time</span>
+                    <input
+                      type="time"
+                      value={areaOpStart}
+                      onChange={(e) => setAreaOpStart(e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>End time</span>
+                    <input
+                      type="time"
+                      value={areaOpEnd}
+                      onChange={(e) => setAreaOpEnd(e.target.value)}
+                      required
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Hourly rate (₹)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={areaHourlyRate}
+                    onChange={(e) => setAreaHourlyRate(e.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+            )}
             {areaModal === "add" && (
               <>
                 <label className="field">

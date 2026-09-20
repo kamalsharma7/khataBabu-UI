@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ownerLogin, ownerMe, type OwnerProfile } from "../api/owner";
 import { getOwnerToken, setOwnerToken } from "../api/ownerClient";
+import { normalizeOwnerUsername } from "../utils/ownerUsername";
 
 interface OwnerAuthContextValue {
   profile: OwnerProfile | null;
@@ -41,7 +42,7 @@ export function OwnerAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
-    const tokens = await ownerLogin(username.trim().toLowerCase(), password);
+    const tokens = await ownerLogin(normalizeOwnerUsername(username), password.trim());
     setOwnerToken(tokens.access_token);
     const me = await ownerMe();
     setProfile(me);

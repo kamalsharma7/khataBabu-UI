@@ -9,15 +9,16 @@ type Props = {
 };
 
 function tableClass(t: FloorTableStatus): string {
+  const time = t.resource_kind === "time_based" ? " pp-table--time" : "";
   switch (t.visual_state) {
     case "running_kot":
-      return "pp-table pp-table--kot";
+      return `pp-table pp-table--kot${time}`;
     case "running":
-      return "pp-table pp-table--running";
+      return `pp-table pp-table--running${time}`;
     case "printed":
-      return "pp-table pp-table--printed";
+      return `pp-table pp-table--printed${time}`;
     default:
-      return "pp-table pp-table--blank";
+      return `pp-table pp-table--blank${time}`;
   }
 }
 
@@ -38,7 +39,15 @@ export function PosTableFloor({ areas, loading, onSelectTable, onViewOrder }: Pr
 
       {areas.map((area) => (
         <section key={area.area_id} className="pp-floor-area">
-          <h2 className="pp-floor-area__name">{area.name}</h2>
+          <div className="pp-floor-area__head">
+            <h2 className="pp-floor-area__name">{area.name}</h2>
+            {(area.billing_mode ?? "dine_in") === "time_based" && area.operating_start && area.operating_end && (
+              <span className="pp-floor-area__hours">
+                {area.operating_start} – {area.operating_end}
+                {area.hourly_rate ? ` · ₹${area.hourly_rate}/hr` : ""}
+              </span>
+            )}
+          </div>
           <div className="pp-floor-grid">
             {area.tables.map((t) => (
               <div key={t.table_id} className={tableClass(t)}>
@@ -59,7 +68,13 @@ export function PosTableFloor({ areas, loading, onSelectTable, onViewOrder }: Pr
                       })}
                     </span>
                   )}
+                  {t.resource_kind === "time_based" && (
+                    <span className="pp-table__time-badge">⏱</span>
+                  )}
                   <span className="pp-table__label">{t.label}</span>
+                  {t.resource_kind === "time_based" && t.hourly_rate && !t.is_occupied && (
+                    <span className="pp-table__rate">₹{t.hourly_rate}/hr</span>
+                  )}
                   {t.is_occupied && t.running_total != null && (
                     <span className="pp-table__amt">{fmt(t.running_total)}</span>
                   )}

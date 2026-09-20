@@ -10,6 +10,7 @@ import type {
   PosOrderLine,
 } from "../../../types/owner";
 import { PosCartSidePanel, type CartPanel } from "./PosCartSidePanel";
+import { PosTimeSessionEditor, type TimeSessionApplyPayload } from "./PosTimeSessionEditor";
 import { dietStripeClass, fmt } from "./posUtils";
 
 type Props = {
@@ -24,6 +25,8 @@ type Props = {
   onQtyChange: (line: PosOrderLine, qty: number) => void;
   onRemoveLine: (line: PosOrderLine) => void;
   onVoidLine: (line: PosOrderLine) => void;
+  onOpenItem: () => void;
+  onEditOpenLine: (line: PosOrderLine) => void;
   onKot: () => void;
   onKotPrint: () => void;
   onSettle: () => void;
@@ -43,6 +46,10 @@ type Props = {
     pay_later?: boolean;
     notes?: string | null;
   }) => void;
+  isTimeBased?: boolean;
+  tableHourlyRate?: string | null;
+  onTimeSessionApply?: (patch: TimeSessionApplyPayload) => void;
+  onCancelOrder?: () => void;
 };
 
 export function PosOrderScreen({
@@ -57,6 +64,8 @@ export function PosOrderScreen({
   onQtyChange,
   onRemoveLine,
   onVoidLine,
+  onOpenItem,
+  onEditOpenLine,
   onKot,
   onKotPrint,
   onSettle,
@@ -71,6 +80,10 @@ export function PosOrderScreen({
   onSplitBill,
   gstHint,
   onSaveOrderDetails,
+  isTimeBased = false,
+  tableHourlyRate = null,
+  onTimeSessionApply,
+  onCancelOrder,
 }: Props) {
   const [activeCategoryId, setActiveCategoryId] = useState(categories[0]?.id ?? "");
   const [search, setSearch] = useState("");
@@ -95,6 +108,8 @@ export function PosOrderScreen({
   }, [menuItems, activeCategoryId, search, shortCode]);
 
   const activeLines = order.lines.filter((l) => l.status !== "cancelled");
+  const timeCharge = parseFloat(order.time_charge ?? "0") || 0;
+  const hasBillable = activeLines.length > 0 || (isTimeBased && timeCharge > 0);
   const canKot = order.lines.some(
     (l) => l.status === "pending_kot" && !String(l.id).startsWith("opt-"),
   );
@@ -125,9 +140,24 @@ export function PosOrderScreen({
           KhataBabu
         </button>
         <span className="pp-order-topbar__table">
-          Dine in · <strong>{tableLabel}</strong> · {areaName}
+          {isTimeBased ? "Time" : "Dine in"} · <strong>{tableLabel}</strong> · {areaName}
         </span>
+        {onCancelOrder && (
+          <button type="button" className="pp-order-cancel" disabled={busy} onClick={onCancelOrder}>
+            Cancel order
+          </button>
+        )}
       </header>
+
+      {isTimeBased && onTimeSessionApply && onCancelOrder && (
+        <PosTimeSessionEditor
+          order={order}
+          hourlyRate={tableHourlyRate}
+          busy={busy}
+          onApply={onTimeSessionApply}
+          onCancelOrder={onCancelOrder}
+        />
+      )}
 
       {/* 10% categories | 90% = items (left) + cart (right) */}
       <div className="pp-order-body">
@@ -159,6 +189,9 @@ export function PosOrderScreen({
                   value={shortCode}
                   onChange={(e) => setShortCode(e.target.value)}
                 />
+                <button type="button" className="pp-items-open-btn" disabled={busy} onClick={onOpenItem}>
+                  Open item
+                </button>
               </div>
             </div>
             <div className="pp-items-grid">
@@ -179,7 +212,7 @@ export function PosOrderScreen({
 
           <aside className="pp-cart-pane" aria-label="Current order">
             <div className="pp-cart-tabs">
-              <span className="pp-cart-tabs__on">Dine In</span>
+              <span className="pp-cart-tabs__on">{isTimeBased ? "Time + order" : "Dine In"}</span>
             </div>
             <nav className="pp-cart-rail" aria-label="Order tools">
               {cartRail.map((item) => (
@@ -206,6 +239,7 @@ export function PosOrderScreen({
                 onQtyChange={onQtyChange}
                 onRemoveLine={onRemoveLine}
                 onVoidLine={onVoidLine}
+                onEditOpenLine={onEditOpenLine}
                 onSaveOrderDetails={onSaveOrderDetails}
               />
             </div>
@@ -217,26 +251,26 @@ export function PosOrderScreen({
                     value={discountPercent}
                     onChange={(e) => onDiscountChange(e.target.value)}
                     onBlur={() => onDiscountApply()}
-                    disabled={busy || activeLines.length === 0}
+                    disabled={busy || !hasBillable}
                   />
                 </label>
                 <span className="pp-bill-toolbar__tax muted">
                   {gstHint ? gstHint : `Tax ${taxPercent}%`}
                 </span>
                 <div className="pp-bill-toolbar__pay">
-                  <button type="button" disabled={busy || activeLines.length === 0} onClick={() => onQuickPay("cash")}>
+                  <button type="button" disabled={busy || !hasBillable} onClick={() => onQuickPay("cash")}>
                     Cash
                   </button>
-                  <button type="button" disabled={busy || activeLines.length === 0} onClick={() => onQuickPay("card")}>
+                  <button type="button" disabled={busy || !hasBillable} onClick={() => onQuickPay("card")}>
                     Card
                   </button>
-                  <button type="button" disabled={busy || activeLines.length === 0} onClick={() => onQuickPay("upi")}>
+                  <button type="button" disabled={busy || !hasBillable} onClick={() => onQuickPay("upi")}>
                     UPI
                   </button>
-                  <button type="button" disabled={busy || activeLines.length === 0} onClick={onPartPay}>
+                  <button type="button" disabled={busy || !hasBillable} onClick={onPartPay}>
                     Part
                   </button>
-                  <button type="button" disabled={busy || activeLines.length === 0} onClick={onSplitBill}>
+                  <button type="button" disabled={busy || !hasBillable} onClick={onSplitBill}>
                     Split
                   </button>
                 </div>
@@ -245,6 +279,9 @@ export function PosOrderScreen({
                 <span>{bill ? "Bill total" : "Total"}</span>
                 <strong>{fmt(displayTotal)}</strong>
               </div>
+              {isTimeBased && timeCharge > 0 && (
+                <p className="muted pp-cart-time-charge">Includes time: {fmt(timeCharge)}</p>
+              )}
               {bill && parseFloat(bill.amount_paid ?? "0") > 0 && (
                 <p className="pp-cart-balance">
                   Paid {fmt(bill.amount_paid!)} · Due <strong>{fmt(balanceDue)}</strong>
@@ -265,7 +302,7 @@ export function PosOrderScreen({
                 <button
                   type="button"
                   className="pp-btn pp-btn--primary"
-                  disabled={busy || activeLines.length === 0}
+                  disabled={busy || !hasBillable}
                   onClick={onSettle}
                 >
                   Save &amp; Settle

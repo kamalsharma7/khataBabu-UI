@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PosBillingNav, type PosBillingSection } from "../../components/owner/pos/PosBillingNav";
 import { PosBillsPanel } from "../../components/owner/pos/PosBillsPanel";
+import { PosOpenLineModal } from "../../components/owner/pos/PosOpenLineModal";
 import { PosOrderScreen } from "../../components/owner/pos/PosOrderScreen";
+import type { TimeSessionApplyPayload } from "../../components/owner/pos/PosTimeSessionEditor";
 import { PosTableFloor } from "../../components/owner/pos/PosTableFloor";
 import { OwnerFloorPage } from "./OwnerFloorPage";
 import { OwnerMenuPage } from "./OwnerMenuPage";
 import {
   optimisticAddLine,
+  optimisticOpenLineUpdate,
   optimisticQtyLine,
   optimisticRemoveLine,
 } from "../../components/owner/pos/posOrderCart";
@@ -16,7 +19,9 @@ import {
   listMenuItems,
   posAddBillPayment,
   posAddLine,
+  posAddOpenLine,
   posCancelLine,
+  posCancelOrder,
   posCreateBill,
   posCreateOrder,
   posBillingSettings,
@@ -71,6 +76,7 @@ export function OwnerPosPage() {
   const [pickerVariationId, setPickerVariationId] = useState("");
   const [pickerAddonIds, setPickerAddonIds] = useState<string[]>([]);
   const [pickerQty, setPickerQty] = useState(1);
+  const [openLineEdit, setOpenLineEdit] = useState<PosOrderLine | null | undefined>(undefined);
 
   const [settleOpen, setSettleOpen] = useState(false);
   const [bill, setBill] = useState<PosBill | null>(null);
@@ -136,6 +142,13 @@ export function OwnerPosPage() {
         await callApi();
         const fresh = await posGetOrder(outletId, orderId);
         setOrder(fresh);
+        try {
+          setBill(await posGetBill(outletId, orderId));
+        } catch (err) {
+          if (err instanceof OwnerApiError && err.status === 404) {
+            /* no open bill for this order yet */
+          }
+        }
       };
 
       const task = orderMutationTail.current.then(work, work);
@@ -174,6 +187,37 @@ export function OwnerPosPage() {
     if (!outlet) return;
     setFloor(await posFloor(outlet.id));
   }, [outlet]);
+
+  const applyTimeSession = useCallback(
+    async (patch: TimeSessionApplyPayload) => {
+      if (!outlet || !order) return;
+      setBusy(true);
+      setError(null);
+      try {
+        const updated = await posUpdateOrder(outlet.id, order.id, patch);
+        setOrder(updated);
+        await refreshFloor();
+        if (bill) {
+          try {
+            const b = await posCreateBill(outlet.id, order.id, {
+              discount_amount: parseFloat(discountAmount) || 0,
+              discount_percent: parseFloat(discountPercent) || 0,
+              tax_percent: parseFloat(taxPercent) || 0,
+              round_to_rupee: true,
+            });
+            setBill(b);
+          } catch {
+            /* bill refresh optional */
+          }
+        }
+      } catch (err) {
+        setError(err instanceof OwnerApiError ? err.message : "Could not update session");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [outlet, order, bill, discountAmount, discountPercent, taxPercent, refreshFloor],
+  );
 
   const loadCatalog = useCallback(async () => {
     if (!outlet) return;
@@ -267,6 +311,28 @@ export function OwnerPosPage() {
     setSelectedTable(null);
     await refreshFloor();
   };
+
+  const cancelCurrentOrder = useCallback(async () => {
+    if (!outlet || !order) return;
+    const hasTime =
+      (parseFloat(order.time_charge ?? "0") || 0) > 0 ||
+      order.time_session_start != null;
+    const hasLines = order.lines.some((l) => l.status !== "cancelled");
+    const msg = hasLines || hasTime
+      ? "Cancel this order? Items and table time will be cleared and the table will be free."
+      : "Cancel this order and free the table?";
+    if (!confirm(msg)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await posCancelOrder(outlet.id, order.id);
+      await backToFloor();
+    } catch (err) {
+      setError(err instanceof OwnerApiError ? err.message : "Could not cancel order");
+    } finally {
+      setBusy(false);
+    }
+  }, [outlet, order]);
 
   const loadBills = useCallback(async () => {
     if (!outlet) return;
@@ -366,6 +432,54 @@ export function OwnerPosPage() {
     }
   };
 
+  const submitOpenLine = async (payload: {
+    description: string;
+    unit_price: number;
+    quantity: number;
+    notes: string | null;
+    menu_item_id: string | null;
+  }) => {
+    if (!outlet || !order) return;
+    const orderId = order.id;
+    const editing = openLineEdit ?? null;
+    setBusy(true);
+    setError(null);
+    try {
+      if (editing) {
+        await runOrderMutation(
+          orderId,
+          (o) => optimisticOpenLineUpdate(o, editing.id, payload),
+          () =>
+            posUpdateLine(outlet.id, orderId, editing.id, {
+              quantity: payload.quantity,
+              unit_price: payload.unit_price,
+              notes: payload.notes,
+            }),
+        );
+      } else {
+        const updated = await posAddOpenLine(outlet.id, orderId, {
+          description: payload.description,
+          unit_price: payload.unit_price,
+          quantity: payload.quantity,
+          notes: payload.notes,
+          menu_item_id: payload.menu_item_id,
+        });
+        setOrder(updated);
+      }
+      setOpenLineEdit(undefined);
+      await loadOrderExtras(orderId);
+      try {
+        setBill(await posCreateBill(outlet.id, orderId, billPreviewBody()));
+      } catch {
+        setBill(null);
+      }
+    } catch (err) {
+      setError(err instanceof OwnerApiError ? err.message : "Open item failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const onQtyChange = async (line: PosOrderLine, qty: number) => {
     if (!outlet || !order || qty < 1 || line.id.startsWith("opt-")) return;
     const orderId = order.id;
@@ -390,6 +504,20 @@ export function OwnerPosPage() {
     await orderMutationTail.current;
     const b = await posCreateBill(outlet.id, order.id, billPreviewBody());
     setBill(b);
+    return b;
+  };
+
+  const syncPaymentsToBillBalance = useCallback((b: PosBill) => {
+    const remaining = money(money(b.grand_total) - money(b.amount_paid ?? "0"));
+    setPayments((prev) => {
+      if (prev.length !== 1) return prev;
+      return [{ ...prev[0], amount: remaining.toFixed(2) }];
+    });
+  }, []);
+
+  const refreshSettleBill = async () => {
+    const b = await refreshBillPreview();
+    if (b) syncPaymentsToBillBalance(b);
     return b;
   };
 
@@ -539,13 +667,17 @@ export function OwnerPosPage() {
         return;
       }
       const alreadyPaid = money(latest.amount_paid ?? "0");
-      const payRows = payments
+      const remaining = money(money(latest.grand_total) - alreadyPaid);
+      let payRows = payments
         .filter((p) => parseFloat(p.amount) > 0)
         .map((p) => ({
           method: p.method,
           amount: money(parseFloat(p.amount)),
           reference: p.reference.trim() || null,
         }));
+      if (payRows.length === 1 && money(payRows[0].amount) !== remaining) {
+        payRows = [{ ...payRows[0], amount: remaining }];
+      }
       const newPaid = payRows.reduce((s, p) => s + p.amount, 0);
       const grand = money(latest.grand_total);
       if (money(alreadyPaid + newPaid) !== grand) {
@@ -576,6 +708,10 @@ export function OwnerPosPage() {
 
   const showOrderScreen =
     billingSection === "tables" && screen === "order" && order && selectedTable;
+  const selectedAreaMeta = floor?.areas.find((a) => a.area_id === selectedTable?.area_id);
+  const isTimeTable =
+    selectedTable?.resource_kind === "time_based" ||
+    selectedAreaMeta?.billing_mode === "time_based";
 
   return (
     <div className="pp-root pp-billing-layout">
@@ -593,7 +729,12 @@ export function OwnerPosPage() {
         {billingSection === "menu" && <OwnerMenuPage embedded />}
 
         {billingSection === "bills" && (
-          <PosBillsPanel bills={bills} loading={billsLoading} onRefresh={() => void loadBills()} />
+          <PosBillsPanel
+            outletId={outlet.id}
+            bills={bills}
+            loading={billsLoading}
+            onRefresh={() => void loadBills()}
+          />
         )}
 
         {billingSection === "tables" && !showOrderScreen && (
@@ -648,6 +789,8 @@ export function OwnerPosPage() {
               })
               .finally(() => setBusy(false));
           }}
+          onOpenItem={() => setOpenLineEdit(null)}
+          onEditOpenLine={(line) => setOpenLineEdit(line)}
           onKot={() => void sendKot()}
           onKotPrint={() => void sendKot()}
           onSettle={() => void openSettle()}
@@ -665,25 +808,39 @@ export function OwnerPosPage() {
           onPartPay={() => void openPartPay()}
           onSplitBill={() => void openSplit()}
           onSaveOrderDetails={(patch) => void saveOrderDetails(patch)}
+          isTimeBased={isTimeTable}
+          tableHourlyRate={selectedTable.hourly_rate}
+          onTimeSessionApply={(patch) => void applyTimeSession(patch)}
+          onCancelOrder={() => void cancelCurrentOrder()}
         />
         )}
       </div>
+
+      {openLineEdit !== undefined && (
+        <PosOpenLineModal
+          menuItems={menuItems}
+          editLine={openLineEdit}
+          busy={busy}
+          onClose={() => setOpenLineEdit(undefined)}
+          onSubmit={(payload) => void submitOpenLine(payload)}
+        />
+      )}
 
       {pickerItem && (
         <div className="modal-backdrop" role="presentation" onClick={() => setPickerItem(null)}>
           <div className="card modal pos-picker-modal" onClick={(e) => e.stopPropagation()} role="dialog">
             <h2>{pickerItem.name}</h2>
-            {pickerItem.variations.length > 0 && (
+            {(pickerItem.variations?.length ?? 0) > 0 && (
               <label className="field">
                 <span>Variation</span>
                 <select value={pickerVariationId} onChange={(e) => setPickerVariationId(e.target.value)}>
-                  {pickerItem.variations.map((v) => (
+                  {(pickerItem.variations ?? []).map((v) => (
                     <option key={v.id} value={v.id}>{v.name} — {fmt(v.price)}</option>
                   ))}
                 </select>
               </label>
             )}
-            {pickerItem.addons.filter((a) => a.is_available).map((a) => (
+            {(pickerItem.addons ?? []).filter((a) => a.is_available).map((a) => (
               <label key={a.id} className="field field--checkbox">
                 <input
                   type="checkbox"
@@ -735,16 +892,33 @@ export function OwnerPosPage() {
             <div className="pos-settle-grid">
               <label className="field">
                 <span>Discount %</span>
-                <input value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} onBlur={() => void refreshBillPreview()} />
+                <input
+                  value={discountPercent}
+                  onChange={(e) => {
+                    setDiscountPercent(e.target.value);
+                    setDiscountAmount("0");
+                  }}
+                  onBlur={() => void refreshSettleBill()}
+                />
               </label>
               <label className="field">
                 <span>Discount ₹</span>
-                <input value={discountAmount} onChange={(e) => { setDiscountAmount(e.target.value); setDiscountPercent("0"); }} onBlur={() => void refreshBillPreview()} />
+                <input
+                  value={discountAmount}
+                  onChange={(e) => {
+                    setDiscountAmount(e.target.value);
+                    setDiscountPercent("0");
+                  }}
+                  onBlur={() => void refreshSettleBill()}
+                />
               </label>
               <label className="field">
                 <span>Tax %</span>
-                <input value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} onBlur={() => void refreshBillPreview()} />
+                <input value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} onBlur={() => void refreshSettleBill()} />
               </label>
+              <button type="button" className="btn btn-secondary btn-sm pos-settle-apply-disc" disabled={busy} onClick={() => void refreshSettleBill()}>
+                Apply discount
+              </button>
             </div>
             {gstHint && <p className="muted">{gstHint}</p>}
             <p className="muted">Subtotal {fmt(bill.subtotal)} · Disc {fmt(bill.discount_amount)} · Tax {fmt(bill.tax_amount)}</p>

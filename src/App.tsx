@@ -11,6 +11,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import { OwnerChangePasswordPage } from "./pages/owner/OwnerChangePasswordPage";
 import { OwnerDashboardPage } from "./pages/owner/OwnerDashboardPage";
+import { OwnerOverviewPage } from "./pages/owner/OwnerOverviewPage";
 import { OwnerFloorPage } from "./pages/owner/OwnerFloorPage";
 import { OwnerLoginPage } from "./pages/owner/OwnerLoginPage";
 import { OwnerMenuPage } from "./pages/owner/OwnerMenuPage";
@@ -33,6 +34,7 @@ export default function App() {
               }
             >
               <Route path="/app" element={<OwnerDashboardPage />} />
+              <Route path="/app/overview" element={<OwnerOverviewPage />} />
               <Route path="/app/pos" element={<OwnerPosPage />} />
               <Route path="/app/floor" element={<OwnerFloorPage />} />
               <Route path="/app/menu" element={<OwnerMenuPage />} />

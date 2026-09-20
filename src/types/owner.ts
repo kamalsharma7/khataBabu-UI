@@ -6,12 +6,17 @@ export interface OutletSummary {
 }
 
 export type ResourceKind = "dine_table" | "time_based";
+export type AreaBillingMode = "dine_in" | "time_based";
 
 export interface VenueArea {
   id: string;
   outlet_id: string;
   name: string;
   sort_order: number;
+  billing_mode: AreaBillingMode;
+  operating_start: string | null;
+  operating_end: string | null;
+  hourly_rate: string | null;
 }
 
 export interface VenueTable {
@@ -103,7 +108,8 @@ export interface PosOrderLineAddon {
 
 export interface PosOrderLine {
   id: string;
-  menu_item_id: string;
+  menu_item_id: string | null;
+  is_open_item?: boolean;
   menu_item_variation_id: string | null;
   item_name: string;
   variation_name: string | null;
@@ -131,6 +137,11 @@ export interface PosOrder {
   notes: string | null;
   created_at: string;
   settled_at: string | null;
+  time_session_start: string | null;
+  time_session_end: string | null;
+  time_billed_minutes: number | null;
+  hourly_rate_snapshot: string | null;
+  time_charge: string | null;
   lines: PosOrderLine[];
   running_subtotal: string;
 }
@@ -148,6 +159,23 @@ export interface PosBillListEntry extends PosBill {
   created_at: string;
   table_label: string | null;
   customer_name: string | null;
+}
+
+export interface PosBillDetail {
+  bill: PosBill;
+  order_id: string;
+  order_number: number;
+  order_type: OrderType;
+  order_created_at: string;
+  settled_at: string | null;
+  table_label: string | null;
+  customer_name: string | null;
+  customer_mobile: string | null;
+  guest_count: number | null;
+  pay_later: boolean;
+  order_notes: string | null;
+  lines: PosOrderLine[];
+  kots: PosKot[];
 }
 
 export interface PosBill {
@@ -174,11 +202,64 @@ export interface SplitBillPreview {
   amount_per_part: string;
 }
 
+export interface AnalyticsStatus {
+  pin_configured: boolean;
+}
+
+export interface AnalyticsUnlockResult {
+  analytics_token: string;
+  expires_in_minutes: number;
+  pin_configured: boolean;
+}
+
+export interface AnalyticsPaymentBreakdown {
+  method: PaymentMethod;
+  amount: string;
+  count: number;
+}
+
+export interface AnalyticsSummary {
+  from_datetime: string;
+  to_datetime: string;
+  gross_sales: string;
+  total_collected: string;
+  discount_total: string;
+  tax_total: string;
+  orders_settled: number;
+  orders_cancelled: number;
+  average_bill: string;
+  pay_later_settled: number;
+  open_orders_now: number;
+  payment_breakdown: AnalyticsPaymentBreakdown[];
+}
+
+export interface AnalyticsOrderRow {
+  order_id: string;
+  order_number: number;
+  bill_number: number;
+  settled_at: string;
+  table_label: string | null;
+  customer_name: string | null;
+  guest_count: number | null;
+  subtotal: string;
+  discount_amount: string;
+  tax_amount: string;
+  grand_total: string;
+  pay_later: boolean;
+  payments_summary: string;
+}
+
+export interface AnalyticsOrdersPage {
+  total: number;
+  items: AnalyticsOrderRow[];
+}
+
 export interface FloorTableStatus {
   table_id: string;
   area_id: string;
   label: string;
   resource_kind: string;
+  hourly_rate: string | null;
   is_occupied: boolean;
   visual_state: TableVisualState;
   current_order_id: string | null;
@@ -192,6 +273,10 @@ export interface FloorTableStatus {
 export interface FloorAreaStatus {
   area_id: string;
   name: string;
+  billing_mode: AreaBillingMode;
+  operating_start: string | null;
+  operating_end: string | null;
+  hourly_rate: string | null;
   tables: FloorTableStatus[];
 }
 

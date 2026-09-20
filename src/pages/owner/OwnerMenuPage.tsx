@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   createMenuCategory,
   createMenuItem,
@@ -10,16 +10,20 @@ import {
   updateMenuItem,
 } from "../../api/owner";
 import { OwnerApiError } from "../../api/ownerClient";
+import { MenuItemModifierSummary } from "../../components/owner/menu/MenuItemModifierSummary";
+import {
+  MenuModifierFields,
+  type AddonRow,
+  type VariationRow,
+} from "../../components/owner/menu/MenuModifierFields";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import { downloadMenuExcel } from "../../utils/exportMenuExcel";
 import type {
   MenuAddonInput,
   MenuCategory,
   MenuItem,
   MenuVariationInput,
 } from "../../types/owner";
-
-type VariationRow = { name: string; price: string; is_default: boolean };
-type AddonRow = { name: string; price: string };
 
 const emptyVariation = (defaultSize = false): VariationRow => ({
   name: "",
@@ -48,19 +52,6 @@ function rowsToAddons(rows: AddonRow[]): MenuAddonInput[] {
   }));
 }
 
-function formatModifiers(item: MenuItem): string {
-  const parts: string[] = [];
-  if (item.variations?.length) {
-    parts.push(
-      item.variations.map((v) => `${v.name} ₹${v.price}${v.is_default ? " (default)" : ""}`).join(", "),
-    );
-  }
-  if (item.addons?.length) {
-    parts.push(`+ ${item.addons.map((a) => `${a.name} ₹${a.price}`).join(", ")}`);
-  }
-  return parts.join(" · ") || "—";
-}
-
 function itemToVariationRows(item: MenuItem): VariationRow[] {
   if (!item.variations?.length) return [emptyVariation()];
   return item.variations.map((v) => ({
@@ -75,14 +66,30 @@ function itemToAddonRows(item: MenuItem): AddonRow[] {
   return item.addons.map((a) => ({ name: a.name, price: String(a.price) }));
 }
 
+function dietStripeClass(item: MenuItem): string {
+  const ft = item.food_type ?? (item.is_veg ? "veg" : "non_veg");
+  if (ft === "non_veg") return "pp-diet--nonveg";
+  if (ft === "egg") return "pp-diet--egg";
+  return "pp-diet--veg";
+}
+
+function dietLabel(item: MenuItem): string {
+  const ft = item.food_type ?? (item.is_veg ? "veg" : "non_veg");
+  if (ft === "non_veg") return "Non-veg";
+  if (ft === "egg") return "Egg";
+  return "Veg";
+}
+
 type OwnerMenuPageProps = { embedded?: boolean };
 
-export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
+export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
   const { outlet } = useOwnerOutlet();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterCategoryId, setFilterCategoryId] = useState<string | "all">("all");
+  const [addPanelOpen, setAddPanelOpen] = useState(true);
 
   const [newCategory, setNewCategory] = useState("");
   const [itemForm, setItemForm] = useState({
@@ -92,12 +99,16 @@ export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
     short_code: "",
     food_type: "veg" as "veg" | "non_veg" | "egg",
   });
-  const [newVariations, setNewVariations] = useState<VariationRow[]>([emptyVariation()]);
+  const [newVariations, setNewVariations] = useState<VariationRow[]>([emptyVariation(true)]);
   const [newAddons, setNewAddons] = useState<AddonRow[]>([emptyAddon()]);
 
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [editVariations, setEditVariations] = useState<VariationRow[]>([]);
   const [editAddons, setEditAddons] = useState<AddonRow[]>([]);
+
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [priceSaving, setPriceSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!outlet) return;
@@ -124,6 +135,16 @@ export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const itemsByCategory = useCallback(
+    (catId: string) => items.filter((i) => i.category_id === catId),
+    [items],
+  );
+
+  const visibleCategories = useMemo(() => {
+    if (filterCategoryId === "all") return categories;
+    return categories.filter((c) => c.id === filterCategoryId);
+  }, [categories, filterCategoryId]);
 
   const addCategory = async (e: FormEvent) => {
     e.preventDefault();
@@ -158,12 +179,53 @@ export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
         addons,
       });
       setItemForm((f) => ({ ...f, name: "", price: "", short_code: "" }));
-      setNewVariations([emptyVariation()]);
+      setNewVariations([emptyVariation(true)]);
       setNewAddons([emptyAddon()]);
       await load();
     } catch (err) {
       alert(err instanceof OwnerApiError ? err.message : "Failed");
     }
+  };
+
+  const startEditPrice = (item: MenuItem) => {
+    setEditingPriceId(item.id);
+    setPriceDraft(item.price);
+  };
+
+  const cancelEditPrice = () => {
+    setEditingPriceId(null);
+    setPriceDraft("");
+  };
+
+  const savePrice = async (item: MenuItem) => {
+    if (!outlet) return;
+    const next = parseFloat(priceDraft);
+    if (Number.isNaN(next) || next < 0) {
+      alert("Enter a valid price (0 or more).");
+      return;
+    }
+    setPriceSaving(true);
+    try {
+      await updateMenuItem(outlet.id, item.id, { price: next });
+      setEditingPriceId(null);
+      setPriceDraft("");
+      await load();
+    } catch (err) {
+      alert(err instanceof OwnerApiError ? err.message : "Could not update price");
+    } finally {
+      setPriceSaving(false);
+    }
+  };
+
+  const handleDownloadExcel = () => {
+    if (!outlet) return;
+    if (items.length === 0) {
+      alert("No menu items to export yet.");
+      return;
+    }
+    void downloadMenuExcel(outlet.name, categories, items).catch(() => {
+      alert("Could not create Excel file.");
+    });
   };
 
   const toggleAvailability = async (item: MenuItem) => {
@@ -181,6 +243,7 @@ export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
     if (!confirm(`Delete category "${cat.name}" and its items?`)) return;
     try {
       await deleteMenuCategory(outlet.id, cat.id);
+      if (filterCategoryId === cat.id) setFilterCategoryId("all");
       await load();
     } catch (err) {
       alert(err instanceof OwnerApiError ? err.message : "Failed");
@@ -230,374 +293,339 @@ export function OwnerMenuPage({ embedded }: OwnerMenuPageProps = {}) {
 
   if (!outlet) return <p className="muted">No outlet found.</p>;
 
-  const itemsByCategory = (catId: string) => items.filter((i) => i.category_id === catId);
-
   return (
-    <div className={`page menu-page${embedded ? " menu-page--embedded" : ""}`}>
-      <h1>Menu</h1>
-      {!embedded && (
-        <p className="muted">
-          Categories and items are saved in the database for this outlet — they stay after you restart
-          the app or server until you add, edit, or remove them.
-        </p>
-      )}
+    <div className={`menu-mgmt${embedded ? " menu-mgmt--embedded" : ""}`}>
+      <header className="menu-mgmt__header">
+        <div>
+          <h1 className="menu-mgmt__title">Manage menu</h1>
+          {!embedded && (
+            <p className="menu-mgmt__subtitle muted">
+              Categories and items are saved for this outlet and appear on the billing screen.
+            </p>
+          )}
+        </div>
+        <div className="menu-mgmt__header-actions">
+          <div className="menu-mgmt__stats">
+            <span className="menu-mgmt__stat">{categories.length} categories</span>
+            <span className="menu-mgmt__stat">{items.length} items</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleDownloadExcel}
+            disabled={loading || items.length === 0}
+          >
+            Download menu (Excel)
+          </button>
+        </div>
+      </header>
 
-      {loading && <p className="muted">Loading…</p>}
+      {loading && <p className="muted menu-mgmt__loading">Loading menu…</p>}
       {error && <p className="form-error">{error}</p>}
 
-      <div className="menu-layout">
-        <section className="card menu-panel">
-          <h2>Categories</h2>
-          <form className="menu-inline-form" onSubmit={addCategory}>
-            <input
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="New category name"
-              required
-            />
-            <button type="submit" className="btn btn-primary btn-sm">Add</button>
-          </form>
-          <ul className="menu-category-list">
-            {categories.map((c) => (
-              <li key={c.id}>
-                <span>{c.name}</span>
-                <button type="button" className="link-danger" onClick={() => removeCategory(c)}>
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="card menu-panel menu-panel--wide">
-          <h2>Add item</h2>
-          <form className="form-grid menu-item-form" onSubmit={addItem}>
-            <label className="field">
-              <span>Category</span>
-              <select
-                value={itemForm.category_id}
-                onChange={(e) => setItemForm({ ...itemForm, category_id: e.target.value })}
-                required
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Item name</span>
+      {!loading && (
+        <div className="menu-mgmt__shell">
+          <aside className="menu-mgmt__sidebar card">
+            <h2 className="menu-mgmt__sidebar-title">Categories</h2>
+            <form className="menu-mgmt__cat-form" onSubmit={addCategory}>
               <input
-                value={itemForm.name}
-                onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                className="menu-mgmt-input"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                placeholder="New category"
                 required
               />
-            </label>
-            <label className="field">
-              <span>{hasVariationsInForm ? "Base price (optional if sizes set)" : "Price (₹)"}</span>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={itemForm.price}
-                onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
-                required={!hasVariationsInForm}
-              />
-            </label>
-            <label className="field">
-              <span>Short code</span>
-              <input
-                value={itemForm.short_code}
-                onChange={(e) => setItemForm({ ...itemForm, short_code: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              <span>Diet (POS colour stripe)</span>
-              <select
-                value={itemForm.food_type}
-                onChange={(e) =>
-                  setItemForm({
-                    ...itemForm,
-                    food_type: e.target.value as "veg" | "non_veg" | "egg",
-                  })
-                }
-              >
-                <option value="veg">Veg (green)</option>
-                <option value="egg">Egg (yellow)</option>
-                <option value="non_veg">Non-veg (red)</option>
-              </select>
-            </label>
+              <button type="submit" className="btn btn-primary btn-sm" title="Add category">
+                +
+              </button>
+            </form>
 
-            <div className="field field--full menu-modifiers-block">
-              <span className="menu-modifiers-label">Variations (sizes / types)</span>
-              <p className="muted menu-modifiers-hint">e.g. Small ₹99, Medium ₹149 — mark one as default.</p>
-              {newVariations.map((row, idx) => (
-                <div key={idx} className="menu-modifier-row">
-                  <input
-                    placeholder="Name"
-                    value={row.name}
-                    onChange={(e) => {
-                      const next = [...newVariations];
-                      next[idx] = { ...row, name: e.target.value };
-                      setNewVariations(next);
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="₹"
-                    value={row.price}
-                    onChange={(e) => {
-                      const next = [...newVariations];
-                      next[idx] = { ...row, price: e.target.value };
-                      setNewVariations(next);
-                    }}
-                  />
-                  <label className="menu-modifier-default">
-                    <input
-                      type="radio"
-                      name="new-default-var"
-                      checked={row.is_default}
-                      onChange={() => setDefaultVariation(newVariations, setNewVariations, idx)}
-                    />
-                    Default
-                  </label>
-                  {newVariations.length > 1 && (
-                    <button
-                      type="button"
-                      className="link-danger"
-                      onClick={() => setNewVariations(newVariations.filter((_, i) => i !== idx))}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              ))}
+            <nav className="menu-mgmt__cat-nav" aria-label="Filter by category">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setNewVariations([...newVariations, emptyVariation()])}
+                className={`menu-mgmt__cat-btn ${filterCategoryId === "all" ? "menu-mgmt__cat-btn--on" : ""}`}
+                onClick={() => setFilterCategoryId("all")}
               >
-                + Variation
+                <span>All items</span>
+                <span className="menu-mgmt__cat-count">{items.length}</span>
               </button>
-            </div>
-
-            <div className="field field--full menu-modifiers-block">
-              <span className="menu-modifiers-label">Toppings / add-ons</span>
-              <p className="muted menu-modifiers-hint">Extra charge per topping (e.g. Extra cheese ₹40).</p>
-              {newAddons.map((row, idx) => (
-                <div key={idx} className="menu-modifier-row">
-                  <input
-                    placeholder="Name"
-                    value={row.name}
-                    onChange={(e) => {
-                      const next = [...newAddons];
-                      next[idx] = { ...row, name: e.target.value };
-                      setNewAddons(next);
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="₹"
-                    value={row.price}
-                    onChange={(e) => {
-                      const next = [...newAddons];
-                      next[idx] = { ...row, price: e.target.value };
-                      setNewAddons(next);
-                    }}
-                  />
-                  {newAddons.length > 1 && (
-                    <button
-                      type="button"
-                      className="link-danger"
-                      onClick={() => setNewAddons(newAddons.filter((_, i) => i !== idx))}
-                    >
-                      Remove
-                    </button>
-                  )}
+              {categories.map((c) => (
+                <div key={c.id} className="menu-mgmt__cat-row">
+                  <button
+                    type="button"
+                    className={`menu-mgmt__cat-btn ${filterCategoryId === c.id ? "menu-mgmt__cat-btn--on" : ""}`}
+                    onClick={() => setFilterCategoryId(c.id)}
+                  >
+                    <span>{c.name}</span>
+                    <span className="menu-mgmt__cat-count">{itemsByCategory(c.id).length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="menu-mgmt-icon-btn menu-mgmt-icon-btn--danger"
+                    onClick={() => void removeCategory(c)}
+                    title={`Delete ${c.name}`}
+                    aria-label={`Delete ${c.name}`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
+            </nav>
+          </aside>
+
+          <div className="menu-mgmt__main">
+            <section className="card menu-mgmt__add-card">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setNewAddons([...newAddons, emptyAddon()])}
+                className="menu-mgmt__add-toggle"
+                onClick={() => setAddPanelOpen((o) => !o)}
+                aria-expanded={addPanelOpen}
               >
-                + Topping
+                <span className="menu-mgmt__add-toggle-title">Add new item</span>
+                <span className="menu-mgmt__add-toggle-icon">{addPanelOpen ? "−" : "+"}</span>
               </button>
-            </div>
 
-            <div className="field field--full">
-              <button type="submit" className="btn btn-primary" disabled={categories.length === 0}>
-                Add item
-              </button>
-            </div>
-          </form>
+              {addPanelOpen && (
+                <form className="menu-mgmt__add-form" onSubmit={addItem}>
+                  <div className="menu-mgmt__form-grid">
+                    <label className="field">
+                      <span>Category</span>
+                      <select
+                        value={itemForm.category_id}
+                        onChange={(e) => setItemForm({ ...itemForm, category_id: e.target.value })}
+                        required
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Item name</span>
+                      <input
+                        value={itemForm.name}
+                        onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{hasVariationsInForm ? "Base price (optional)" : "Price (₹)"}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={itemForm.price}
+                        onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
+                        required={!hasVariationsInForm}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Short code</span>
+                      <input
+                        value={itemForm.short_code}
+                        onChange={(e) => setItemForm({ ...itemForm, short_code: e.target.value })}
+                        placeholder="KOT / kitchen"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Diet type</span>
+                      <select
+                        value={itemForm.food_type}
+                        onChange={(e) =>
+                          setItemForm({
+                            ...itemForm,
+                            food_type: e.target.value as "veg" | "non_veg" | "egg",
+                          })
+                        }
+                      >
+                        <option value="veg">Veg</option>
+                        <option value="egg">Egg</option>
+                        <option value="non_veg">Non-veg</option>
+                      </select>
+                    </label>
+                  </div>
 
-          <h2 className="menu-items-heading">Items</h2>
-          {categories.length === 0 && <p className="muted">Add a category first.</p>}
-          {categories.map((cat) => (
-            <div key={cat.id} className="menu-cat-block">
-              <h3>{cat.name}</h3>
-              {itemsByCategory(cat.id).length === 0 ? (
-                <p className="muted">No items</p>
-              ) : (
-                <table className="data-table menu-items-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Code</th>
-                      <th>Price</th>
-                      <th>Variations / toppings</th>
-                      <th>Veg</th>
-                      <th>Stock</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {itemsByCategory(cat.id).map((item) => (
-                      <tr key={item.id} className={!item.is_available ? "menu-row--off" : ""}>
-                        <td>{item.name}</td>
-                        <td>{item.short_code ?? "—"}</td>
-                        <td>₹{item.price}</td>
-                        <td className="menu-modifiers-cell">{formatModifiers(item)}</td>
-                        <td>{item.is_veg ? "Veg" : "Non-veg"}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => toggleAvailability(item)}
-                          >
-                            {item.is_available ? "In stock" : "Out of stock"}
-                          </button>
-                        </td>
-                        <td className="menu-actions-cell">
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditModifiers(item)}>
-                            Sizes & toppings
-                          </button>
-                          <button type="button" className="link-danger" onClick={() => removeItem(item)}>
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  <MenuModifierFields
+                    variations={newVariations}
+                    setVariations={setNewVariations}
+                    addons={newAddons}
+                    setAddons={setNewAddons}
+                    variationRadioName="new-default-var"
+                    emptyVariation={emptyVariation}
+                    emptyAddon={emptyAddon}
+                    onSetDefaultVariation={(idx) =>
+                      setDefaultVariation(newVariations, setNewVariations, idx)
+                    }
+                  />
+
+                  <button type="submit" className="btn btn-primary" disabled={categories.length === 0}>
+                    Save item
+                  </button>
+                </form>
               )}
-            </div>
-          ))}
-        </section>
-      </div>
+            </section>
+
+            <section className="menu-mgmt__catalog">
+              {categories.length === 0 && (
+                <div className="card menu-mgmt__empty">
+                  <p>Add a category on the left to start building your menu.</p>
+                </div>
+              )}
+
+              {visibleCategories.map((cat) => {
+                const catItems = itemsByCategory(cat.id);
+                return (
+                  <div key={cat.id} className="menu-mgmt__cat-section">
+                    <h2 className="menu-mgmt__cat-heading">
+                      {cat.name}
+                      <span className="menu-mgmt__cat-heading-count">{catItems.length}</span>
+                    </h2>
+                    {catItems.length === 0 ? (
+                      <p className="muted menu-mgmt__cat-empty">No items in this category yet.</p>
+                    ) : (
+                      <div className="menu-mgmt-list card">
+                        {catItems.map((item) => (
+                          <article
+                            key={item.id}
+                            className={`menu-mgmt-row ${!item.is_available ? "menu-mgmt-row--off" : ""}`}
+                          >
+                            <div className={`menu-mgmt-row__stripe ${dietStripeClass(item)}`} />
+                            <div className="menu-mgmt-row__content">
+                              <div className="menu-mgmt-row__head">
+                                <div className="menu-mgmt-row__title-block">
+                                  <h3 className="menu-mgmt-row__name">{item.name}</h3>
+                                  <div className="menu-mgmt-row__meta">
+                                    {item.short_code && (
+                                      <span className="menu-mgmt-tag">Code {item.short_code}</span>
+                                    )}
+                                    <span className="menu-mgmt-tag">{dietLabel(item)}</span>
+                                    <span
+                                      className={`menu-mgmt-tag ${item.is_available ? "menu-mgmt-tag--ok" : "menu-mgmt-tag--off"}`}
+                                    >
+                                      {item.is_available ? "In stock" : "Hidden on POS"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="menu-mgmt-row__price-block">
+                                  {editingPriceId === item.id ? (
+                                    <div className="menu-mgmt-price-edit">
+                                      <label className="menu-mgmt-price-edit__label">
+                                        Base price (₹)
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={priceDraft}
+                                          onChange={(e) => setPriceDraft(e.target.value)}
+                                          disabled={priceSaving}
+                                          autoFocus
+                                        />
+                                      </label>
+                                      <div className="menu-mgmt-price-edit__actions">
+                                        <button
+                                          type="button"
+                                          className="btn btn-primary btn-sm"
+                                          disabled={priceSaving}
+                                          onClick={() => void savePrice(item)}
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-secondary btn-sm"
+                                          disabled={priceSaving}
+                                          onClick={cancelEditPrice}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="menu-mgmt-row__price">₹{item.price}</p>
+                                      <button
+                                        type="button"
+                                        className="menu-mgmt-text-btn"
+                                        onClick={() => startEditPrice(item)}
+                                      >
+                                        Change price
+                                      </button>
+                                      {(item.variations?.length ?? 0) > 0 && (
+                                        <span className="menu-mgmt-row__price-hint muted">
+                                          Size prices → Variations & toppings
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <MenuItemModifierSummary item={item} />
+                            </div>
+                            <div className="menu-mgmt-row__actions">
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => toggleAvailability(item)}
+                              >
+                                {item.is_available ? "Out of stock" : "In stock"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={() => openEditModifiers(item)}
+                              >
+                                Variations & toppings
+                              </button>
+                              <button
+                                type="button"
+                                className="menu-mgmt-text-btn menu-mgmt-text-btn--danger"
+                                onClick={() => void removeItem(item)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
+          </div>
+        </div>
+      )}
 
       {editItem && (
         <div className="modal-backdrop" role="presentation" onClick={() => setEditItem(null)}>
           <div
-            className="card modal menu-edit-modal"
+            className="card modal menu-mgmt-modal menu-mgmt-modal--wide"
             role="dialog"
             aria-labelledby="edit-modifiers-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="edit-modifiers-title">Sizes & toppings — {editItem.name}</h2>
-            <div className="menu-modifiers-block">
-              <span className="menu-modifiers-label">Variations</span>
-              {editVariations.map((row, idx) => (
-                <div key={idx} className="menu-modifier-row">
-                  <input
-                    placeholder="Name"
-                    value={row.name}
-                    onChange={(e) => {
-                      const next = [...editVariations];
-                      next[idx] = { ...row, name: e.target.value };
-                      setEditVariations(next);
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="₹"
-                    value={row.price}
-                    onChange={(e) => {
-                      const next = [...editVariations];
-                      next[idx] = { ...row, price: e.target.value };
-                      setEditVariations(next);
-                    }}
-                  />
-                  <label className="menu-modifier-default">
-                    <input
-                      type="radio"
-                      name="edit-default-var"
-                      checked={row.is_default}
-                      onChange={() => setDefaultVariation(editVariations, setEditVariations, idx)}
-                    />
-                    Default
-                  </label>
-                  <button
-                    type="button"
-                    className="link-danger"
-                    onClick={() => setEditVariations(editVariations.filter((_, i) => i !== idx))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setEditVariations([...editVariations, emptyVariation()])}
-              >
-                + Variation
-              </button>
-            </div>
-            <div className="menu-modifiers-block">
-              <span className="menu-modifiers-label">Toppings</span>
-              {editAddons.map((row, idx) => (
-                <div key={idx} className="menu-modifier-row">
-                  <input
-                    placeholder="Name"
-                    value={row.name}
-                    onChange={(e) => {
-                      const next = [...editAddons];
-                      next[idx] = { ...row, name: e.target.value };
-                      setEditAddons(next);
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="₹"
-                    value={row.price}
-                    onChange={(e) => {
-                      const next = [...editAddons];
-                      next[idx] = { ...row, price: e.target.value };
-                      setEditAddons(next);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="link-danger"
-                    onClick={() => setEditAddons(editAddons.filter((_, i) => i !== idx))}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => setEditAddons([...editAddons, emptyAddon()])}
-              >
-                + Topping
-              </button>
-            </div>
+            <h2 id="edit-modifiers-title" className="menu-mgmt-modal__title">
+              Sizes & toppings
+            </h2>
+            <p className="muted menu-mgmt-modal__item">{editItem.name}</p>
+            <MenuModifierFields
+              variations={editVariations}
+              setVariations={setEditVariations}
+              addons={editAddons}
+              setAddons={setEditAddons}
+              variationRadioName="edit-default-var"
+              emptyVariation={emptyVariation}
+              emptyAddon={emptyAddon}
+              onSetDefaultVariation={(idx) =>
+                setDefaultVariation(editVariations, setEditVariations, idx)
+              }
+            />
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setEditItem(null)}>
                 Cancel
               </button>
-              <button type="button" className="btn btn-primary" onClick={saveEditModifiers}>
-                Save
+              <button type="button" className="btn btn-primary" onClick={() => void saveEditModifiers()}>
+                Save changes
               </button>
             </div>
           </div>

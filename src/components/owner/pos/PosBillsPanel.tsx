@@ -1,8 +1,12 @@
-import { useMemo } from "react";
-import type { PosBillListEntry } from "../../../types/owner";
+import { useMemo, useState } from "react";
+import { posGetBillDetail } from "../../../api/owner";
+import { OwnerApiError } from "../../../api/ownerClient";
+import type { PosBillDetail, PosBillListEntry } from "../../../types/owner";
+import { PosBillDetailModal } from "./PosBillDetailModal";
 import { fmt } from "./posUtils";
 
 type Props = {
+  outletId: string;
   bills: PosBillListEntry[];
   loading: boolean;
   onRefresh: () => void;
@@ -23,7 +27,11 @@ function billTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-export function PosBillsPanel({ bills, loading, onRefresh }: Props) {
+export function PosBillsPanel({ outletId, bills, loading, onRefresh }: Props) {
+  const [detail, setDetail] = useState<PosBillDetail | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
   const grouped = useMemo(() => {
     const map = new Map<string, PosBillListEntry[]>();
     for (const b of bills) {
@@ -35,6 +43,18 @@ export function PosBillsPanel({ bills, loading, onRefresh }: Props) {
     return Array.from(map.entries());
   }, [bills]);
 
+  const openDetail = async (billId: string) => {
+    setDetailError(null);
+    setDetailLoadingId(billId);
+    try {
+      setDetail(await posGetBillDetail(outletId, billId));
+    } catch (err) {
+      setDetailError(err instanceof OwnerApiError ? err.message : "Could not load bill details");
+    } finally {
+      setDetailLoadingId(null);
+    }
+  };
+
   return (
     <div className="pp-bills-panel">
       <div className="pp-bills-panel__head">
@@ -43,6 +63,7 @@ export function PosBillsPanel({ bills, loading, onRefresh }: Props) {
           Refresh
         </button>
       </div>
+      {detailError && <p className="form-error">{detailError}</p>}
       {loading && <p className="muted">Loading bills…</p>}
       {!loading && bills.length === 0 && <p className="muted">No settled bills yet.</p>}
       {grouped.map(([date, rows]) => (
@@ -64,11 +85,23 @@ export function PosBillsPanel({ bills, loading, onRefresh }: Props) {
                 <div className="pp-bills-row__pay muted">
                   {b.payments.map((p) => `${p.method} ${fmt(p.amount)}`).join(" · ") || "—"}
                 </div>
+                <div className="pp-bills-row__actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={detailLoadingId === b.id}
+                    onClick={() => void openDetail(b.id)}
+                  >
+                    {detailLoadingId === b.id ? "Loading…" : "View bill"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
         </section>
       ))}
+
+      {detail && <PosBillDetailModal detail={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }

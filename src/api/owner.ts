@@ -8,6 +8,7 @@ import type {
   OutletSummary,
   PaymentMethod,
   PosBill,
+  PosBillDetail,
   PosBillListEntry,
   PosKot,
   PosOrder,
@@ -67,6 +68,10 @@ export function createArea(
   body: {
     name: string;
     sort_order?: number;
+    billing_mode?: "dine_in" | "time_based";
+    operating_start?: string | null;
+    operating_end?: string | null;
+    hourly_rate?: number | null;
     initial_table_count?: number;
     table_label_prefix?: string;
   },
@@ -95,7 +100,18 @@ export function bulkCreateTables(
   );
 }
 
-export function updateArea(outletId: string, areaId: string, data: { name?: string; sort_order?: number }) {
+export function updateArea(
+  outletId: string,
+  areaId: string,
+  data: {
+    name?: string;
+    sort_order?: number;
+    billing_mode?: "dine_in" | "time_based";
+    operating_start?: string | null;
+    operating_end?: string | null;
+    hourly_rate?: number | null;
+  },
+) {
   return ownerApiRequest<VenueArea>(`/owner/outlets/${outletId}/areas/${areaId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -229,6 +245,10 @@ export function posListBills(outletId: string, billStatus: "settled" | "open" | 
   return ownerApiRequest<PosBillListEntry[]>(`/owner/outlets/${outletId}/pos/bills${q}`);
 }
 
+export function posGetBillDetail(outletId: string, billId: string) {
+  return ownerApiRequest<PosBillDetail>(`/owner/outlets/${outletId}/pos/bills/${billId}/detail`);
+}
+
 export function posGetBill(outletId: string, orderId: string) {
   return ownerApiRequest<PosBill>(`/owner/outlets/${outletId}/pos/orders/${orderId}/bill`);
 }
@@ -256,6 +276,12 @@ export function posUpdateOrder(
     customer_mobile?: string | null;
     pay_later?: boolean;
     notes?: string | null;
+    time_duration_minutes?: number;
+    time_start_now?: boolean;
+    time_end_now?: boolean;
+    time_session_start?: string;
+    time_session_end?: string;
+    clear_time_session?: boolean;
   },
 ) {
   return ownerApiRequest<PosOrder>(`/owner/outlets/${outletId}/pos/orders/${orderId}`, {
@@ -281,11 +307,28 @@ export function posAddLine(
   });
 }
 
+export function posAddOpenLine(
+  outletId: string,
+  orderId: string,
+  body: {
+    description: string;
+    unit_price: number;
+    quantity?: number;
+    notes?: string | null;
+    menu_item_id?: string | null;
+  },
+) {
+  return ownerApiRequest<PosOrder>(
+    `/owner/outlets/${outletId}/pos/orders/${orderId}/open-lines`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
 export function posUpdateLine(
   outletId: string,
   orderId: string,
   lineId: string,
-  body: { quantity?: number; notes?: string | null },
+  body: { quantity?: number; notes?: string | null; unit_price?: number },
 ) {
   return ownerApiRequest<PosOrder>(
     `/owner/outlets/${outletId}/pos/orders/${orderId}/lines/${lineId}`,
@@ -405,4 +448,50 @@ export function posCancelOrder(outletId: string, orderId: string, reason?: strin
     method: "POST",
     body: JSON.stringify({ reason: reason ?? null }),
   });
+}
+
+export function analyticsStatus(outletId: string) {
+  return ownerApiRequest<import("../types/owner").AnalyticsStatus>(
+    `/owner/outlets/${outletId}/analytics/status`,
+  );
+}
+
+export function analyticsUnlock(
+  outletId: string,
+  body: { pin?: string; login_password?: string; new_pin?: string },
+) {
+  return ownerApiRequest<import("../types/owner").AnalyticsUnlockResult>(
+    `/owner/outlets/${outletId}/analytics/unlock`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+function analyticsQuery(from: string, to: string): string {
+  return `from_datetime=${encodeURIComponent(from)}&to_datetime=${encodeURIComponent(to)}`;
+}
+
+export function analyticsSummary(
+  outletId: string,
+  fromIso: string,
+  toIso: string,
+  analyticsToken: string,
+) {
+  return ownerApiRequest<import("../types/owner").AnalyticsSummary>(
+    `/owner/outlets/${outletId}/analytics/summary?${analyticsQuery(fromIso, toIso)}`,
+    { analyticsToken },
+  );
+}
+
+export function analyticsOrders(
+  outletId: string,
+  fromIso: string,
+  toIso: string,
+  analyticsToken: string,
+  offset = 0,
+  limit = 50,
+) {
+  return ownerApiRequest<import("../types/owner").AnalyticsOrdersPage>(
+    `/owner/outlets/${outletId}/analytics/orders?${analyticsQuery(fromIso, toIso)}&offset=${offset}&limit=${limit}`,
+    { analyticsToken },
+  );
 }

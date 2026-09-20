@@ -15,6 +15,7 @@ type Props = {
   onQtyChange: (line: PosOrderLine, qty: number) => void;
   onRemoveLine: (line: PosOrderLine) => void;
   onVoidLine: (line: PosOrderLine) => void;
+  onEditOpenLine?: (line: PosOrderLine) => void;
   onSaveOrderDetails: (patch: {
     customer_name?: string | null;
     customer_mobile?: string | null;
@@ -34,6 +35,7 @@ export function PosCartSidePanel({
   onQtyChange,
   onRemoveLine,
   onVoidLine,
+  onEditOpenLine,
   onSaveOrderDetails,
 }: Props) {
   const [customerName, setCustomerName] = useState(order.customer_name ?? "");
@@ -176,6 +178,11 @@ export function PosCartSidePanel({
         {order.customer_name && <span className="pp-cart-guest">{order.customer_name}</span>}
         {order.pay_later && <span className="pp-cart-pay-later">Pay later</span>}
       </div>
+      {kots.length > 0 && (
+        <p className="pp-cart-kot-hint muted">
+          KOT sent — you can still change qty or void items until Save &amp; Settle. New items need another KOT.
+        </p>
+      )}
       <div className="pp-cart-cols">
         <span className="pp-cart-cols__items">Items</span>
         <span className="pp-cart-cols__qty">Qty.</span>
@@ -203,9 +210,40 @@ export function PosCartSidePanel({
             </button>
             <div className="pp-cart-line__info">
               <span className="pp-cart-line__name">
-                {line.item_name}
-                {line.variation_name ? ` (${line.variation_name})` : ""}
+                <span className="pp-cart-line__name-text">
+                  {line.is_open_item && <span className="pp-cart-line__open-tag">Open</span>}
+                  {line.item_name}
+                  {line.variation_name ? ` (${line.variation_name})` : ""}
+                  {line.status === "in_kot" && <span className="pp-cart-line__kot-tag">In KOT</span>}
+                  {line.status === "pending_kot" && kots.length > 0 && (
+                    <span className="pp-cart-line__kot-tag pp-cart-line__kot-tag--new">New</span>
+                  )}
+                </span>
+                {line.is_open_item &&
+                  onEditOpenLine &&
+                  line.status !== "cancelled" &&
+                  (line.status === "pending_kot" || line.status === "in_kot") && (
+                    <button
+                      type="button"
+                      className="pp-cart-line__modify"
+                      title="Edit price or quantity"
+                      aria-label="Edit open item"
+                      disabled={busy}
+                      onClick={() => onEditOpenLine(line)}
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path
+                          d="M13.5 2.5a1.8 1.8 0 0 1 2.5 2.5l-9 9-3.5 1 1-3.5 9-9Z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinejoin="round"
+                        />
+                        <path d="M12 4 16 8" stroke="currentColor" strokeWidth="1.5" />
+                      </svg>
+                    </button>
+                  )}
               </span>
+              {line.notes && <span className="pp-cart-line__note muted">{line.notes}</span>}
               {line.addons.length > 0 && (
                 <span className="pp-cart-line__addons">
                   + {line.addons.map((a) => a.name).join(", ")}
@@ -213,7 +251,7 @@ export function PosCartSidePanel({
               )}
             </div>
             <div className="pp-cart-line__qty">
-              {line.status === "pending_kot" ? (
+              {line.status === "pending_kot" || line.status === "in_kot" ? (
                 <>
                   <button
                     type="button"

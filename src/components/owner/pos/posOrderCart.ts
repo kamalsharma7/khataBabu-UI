@@ -1,15 +1,38 @@
 import type { MenuItem, PosOrder, PosOrderLine } from "../../../types/owner";
+import { optimisticLineId } from "./posIds";
 import { money } from "./posUtils";
 
 function withSubtotal(order: PosOrder, lines: PosOrderLine[]): PosOrder {
-  const total = lines
+  const linesTotal = lines
     .filter((l) => l.status !== "cancelled")
     .reduce((s, l) => s + money(l.line_total), 0);
-  return { ...order, lines, running_subtotal: total.toFixed(2) };
+  const timePart = order.time_charge ? money(order.time_charge) : 0;
+  return { ...order, lines, running_subtotal: (linesTotal + timePart).toFixed(2) };
 }
 
 export function optimisticRemoveLine(order: PosOrder, lineId: string): PosOrder {
   return withSubtotal(order, order.lines.filter((l) => l.id !== lineId));
+}
+
+export function optimisticOpenLineUpdate(
+  order: PosOrder,
+  lineId: string,
+  payload: { quantity: number; unit_price: number; notes: string | null },
+): PosOrder {
+  const lines = order.lines.map((l) => {
+    if (l.id !== lineId) return l;
+    const addonsTotal = money(l.addons_total);
+    const unit = payload.unit_price;
+    const qty = payload.quantity;
+    return {
+      ...l,
+      quantity: qty,
+      unit_price: unit.toFixed(2),
+      notes: payload.notes,
+      line_total: ((unit + addonsTotal) * qty).toFixed(2),
+    };
+  });
+  return withSubtotal(order, lines);
 }
 
 export function optimisticQtyLine(order: PosOrder, lineId: string, qty: number): PosOrder {
@@ -39,8 +62,9 @@ export function optimisticAddLine(
   const addonsTotal = addons.reduce((s, a) => s + money(a.price), 0);
   const unit = money(unitPrice);
   const line: PosOrderLine = {
-    id: `opt-${crypto.randomUUID()}`,
+    id: optimisticLineId(),
     menu_item_id: item.id,
+    is_open_item: false,
     menu_item_variation_id: variationId,
     item_name: item.name,
     variation_name: variation?.name ?? null,

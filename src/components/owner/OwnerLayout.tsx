@@ -55,6 +55,9 @@ export function OwnerLayout() {
         <aside className="platform-sidebar owner-sidebar">
           <nav className="platform-nav">
             <NavLink to="/app" end className="platform-nav__link">
+              Welcome
+            </NavLink>
+            <NavLink to="/app/overview" className="platform-nav__link">
               Overview
             </NavLink>
             <NavLink to="/app/pos" className="platform-nav__link platform-nav__link--primary">
