@@ -1,4 +1,4 @@
-export type PosBillingSection = "tables" | "setup" | "menu" | "bills";
+export type PosBillingSection = "tables" | "setup" | "menu" | "inventory" | "bills";
 
 type Props = {
   open: boolean;
@@ -11,6 +11,7 @@ const ITEMS: { id: PosBillingSection; label: string; short: string }[] = [
   { id: "tables", label: "Billing", short: "Billing" },
   { id: "setup", label: "Table setup", short: "Setup" },
   { id: "menu", label: "Menu view", short: "Menu" },
+  { id: "inventory", label: "Inventory", short: "Stock" },
   { id: "bills", label: "All bills", short: "Bills" },
 ];
 

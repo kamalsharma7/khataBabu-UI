@@ -64,6 +64,19 @@ export interface TenantOnboardingPayload {
     time_based_billing_enabled: boolean;
     rough_scale_notes?: string | null;
   };
+  assigned_sales_employee_id?: string | null;
+  staff?: {
+    admin_seats: number;
+    worker_seats: number;
+  };
+}
+
+export interface SalesEmployee {
+  id: string;
+  employee_code: string;
+  full_name: string;
+  mobile: string;
+  is_active: boolean;
 }
 
 export interface TenantOnboardingResult {
@@ -77,6 +90,11 @@ export interface TenantOnboardingResult {
     temporary_password: string;
     must_change_password: boolean;
   };
+  staff_credentials?: {
+    username: string;
+    temporary_password: string;
+    must_change_password: boolean;
+  }[];
   message: string;
 }
 

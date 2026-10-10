@@ -6,25 +6,31 @@ interface Props {
 }
 
 export function CredentialsModal({ result, onClose }: Props) {
+  const staff = result.staff_credentials ?? [];
+
   const copyAll = async () => {
-    const text = [
+    const lines = [
       `KhataBabu owner access`,
       `Outlet REF: ${result.outlet_ref_code}`,
-      `Username: ${result.owner_credentials.username}`,
-      `Temporary password: ${result.owner_credentials.temporary_password}`,
-      `(Password shown once — share securely.)`,
-    ].join("\n");
-    await navigator.clipboard.writeText(text);
+      `Owner username: ${result.owner_credentials.username}`,
+      `Owner temporary password: ${result.owner_credentials.temporary_password}`,
+    ];
+    staff.forEach((s, i) => {
+      lines.push(`Staff ${i + 1} username: ${s.username}`);
+      lines.push(`Staff ${i + 1} password: ${s.temporary_password}`);
+    });
+    lines.push(`(Passwords shown once — share securely.)`);
+    await navigator.clipboard.writeText(lines.join("\n"));
   };
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
-      <div className="modal card">
-        <h2>Owner credentials (one time)</h2>
+      <div className="modal card cred-modal">
+        <h2>Credentials (one time)</h2>
         <p className="muted">{result.message}</p>
         <p className="cred-hint">
-          Owner signs in at <strong>/app/login</strong> with <strong>username + password</strong> only.
-          REF is for support and billing station — not the login password.
+          Owner and staff sign in at <strong>/app/login</strong> with <strong>username + password</strong>.
+          REF is for support — not the login password.
         </p>
         <dl className="cred-list">
           <div>
@@ -34,17 +40,25 @@ export function CredentialsModal({ result, onClose }: Props) {
             </dd>
           </div>
           <div>
-            <dt>Username</dt>
+            <dt>Owner username</dt>
             <dd>
               <code>{result.owner_credentials.username}</code>
             </dd>
           </div>
           <div>
-            <dt>Temporary password</dt>
+            <dt>Owner temporary password</dt>
             <dd>
               <code className="cred-password">{result.owner_credentials.temporary_password}</code>
             </dd>
           </div>
+          {staff.map((s, idx) => (
+            <div key={s.username} className="cred-list__staff-block">
+              <dt>Staff login {idx + 1}</dt>
+              <dd>
+                <code>{s.username}</code> / <code className="cred-password">{s.temporary_password}</code>
+              </dd>
+            </div>
+          ))}
           <div>
             <dt>Status</dt>
             <dd>

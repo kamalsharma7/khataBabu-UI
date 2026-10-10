@@ -1,5 +1,5 @@
-type VariationRow = { name: string; price: string; is_default: boolean };
-type AddonRow = { name: string; price: string };
+type VariationRow = { name: string; price: string; is_default: boolean; weight_grams: string };
+type AddonRow = { name: string; price: string; weight_grams: string };
 
 type Props = {
   variations: VariationRow[];
@@ -26,7 +26,7 @@ export function MenuModifierFields({
     <div className="menu-mod-panel">
       <p className="menu-mod-panel__hint">
         <strong>How this shows on billing:</strong> variations are sizes or types (customer picks one).
-        Toppings are optional extras added on top of the item price.
+        Toppings are optional extras added on top of the item price. Weight in grams is optional (for kitchen / inventory).
       </p>
 
       <div className="menu-mod-panel__columns">
@@ -37,10 +37,11 @@ export function MenuModifierFields({
           </div>
           <p className="menu-mod-block__desc">Example: Small ₹99, Large ₹149 — one must be default for POS.</p>
 
-          <div className="menu-mod-table" role="table">
+          <div className="menu-mod-table menu-mod-table--with-weight" role="table">
             <div className="menu-mod-table__head" role="row">
               <span role="columnheader">Name</span>
               <span role="columnheader">Price (₹)</span>
+              <span role="columnheader">Weight (g)</span>
               <span role="columnheader">Default</span>
               <span role="columnheader" className="menu-mod-table__head-actions" />
             </div>
@@ -68,6 +69,20 @@ export function MenuModifierFields({
                   onChange={(e) => {
                     const next = [...variations];
                     next[idx] = { ...row, price: e.target.value };
+                    setVariations(next);
+                  }}
+                />
+                <input
+                  className="menu-mod-table__input menu-mod-table__input--num"
+                  type="number"
+                  min={1}
+                  step="1"
+                  placeholder="—"
+                  value={row.weight_grams}
+                  aria-label="Variation weight grams"
+                  onChange={(e) => {
+                    const next = [...variations];
+                    next[idx] = { ...row, weight_grams: e.target.value };
                     setVariations(next);
                   }}
                 />
@@ -110,10 +125,11 @@ export function MenuModifierFields({
           </div>
           <p className="menu-mod-block__desc">Example: Extra cheese ₹40 — customer can select multiple on POS.</p>
 
-          <div className="menu-mod-table menu-mod-table--addons" role="table">
+          <div className="menu-mod-table menu-mod-table--addons menu-mod-table--with-weight" role="table">
             <div className="menu-mod-table__head" role="row">
               <span role="columnheader">Name</span>
               <span role="columnheader">Extra price (₹)</span>
+              <span role="columnheader">Weight (g)</span>
               <span role="columnheader" className="menu-mod-table__head-actions" />
             </div>
             {addons.map((row, idx) => (
@@ -140,6 +156,20 @@ export function MenuModifierFields({
                   onChange={(e) => {
                     const next = [...addons];
                     next[idx] = { ...row, price: e.target.value };
+                    setAddons(next);
+                  }}
+                />
+                <input
+                  className="menu-mod-table__input menu-mod-table__input--num"
+                  type="number"
+                  min={1}
+                  step="1"
+                  placeholder="—"
+                  value={row.weight_grams}
+                  aria-label="Topping weight grams"
+                  onChange={(e) => {
+                    const next = [...addons];
+                    next[idx] = { ...row, weight_grams: e.target.value };
                     setAddons(next);
                   }}
                 />

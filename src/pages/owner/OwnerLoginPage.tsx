@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { OwnerApiError } from "../../api/ownerClient";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { normalizeOwnerUsername } from "../../utils/ownerUsername";
@@ -86,6 +86,9 @@ export function OwnerLoginPage() {
             <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
               {submitting ? "Signing in…" : "Sign in"}
             </button>
+            <p className="login-forgot">
+              <Link to="/app/forgot-password">Forgot password?</Link>
+            </p>
           </form>
         </div>
       </div>

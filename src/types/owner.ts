@@ -43,6 +43,7 @@ export interface MenuVariation {
   price: string;
   sort_order: number;
   is_default: boolean;
+  weight_grams?: number | null;
 }
 
 export interface MenuAddon {
@@ -51,6 +52,7 @@ export interface MenuAddon {
   price: string;
   sort_order: number;
   is_available: boolean;
+  weight_grams?: number | null;
 }
 
 export type FoodType = "veg" | "non_veg" | "egg";
@@ -69,6 +71,9 @@ export interface MenuItem {
   food_type?: FoodType;
   is_available: boolean;
   sort_order: number;
+  gst_applicable?: boolean;
+  cgst_percent?: string;
+  sgst_percent?: string;
   variations: MenuVariation[];
   addons: MenuAddon[];
 }
@@ -78,6 +83,7 @@ export interface MenuVariationInput {
   price: number;
   sort_order?: number;
   is_default?: boolean;
+  weight_grams?: number | null;
 }
 
 export interface MenuAddonInput {
@@ -85,9 +91,12 @@ export interface MenuAddonInput {
   price: number;
   sort_order?: number;
   is_available?: boolean;
+  weight_grams?: number | null;
 }
 
 export type OrderType = "dine_in" | "takeaway" | "delivery";
+export type CustomerRelation = "customer" | "friend" | "worker" | "family" | "other";
+export type OwnerRole = "owner" | "admin" | "worker";
 export type OrderStatus = "open" | "settled" | "cancelled";
 export type OrderLineStatus = "pending_kot" | "in_kot" | "served" | "cancelled";
 export type PaymentMethod =
@@ -133,6 +142,9 @@ export interface PosOrder {
   guest_count: number | null;
   customer_name: string | null;
   customer_mobile: string | null;
+  customer_locality: string | null;
+  customer_relation: CustomerRelation | null;
+  bill_saved_at: string | null;
   pay_later: boolean;
   notes: string | null;
   created_at: string;
@@ -144,6 +156,7 @@ export interface PosOrder {
   time_charge: string | null;
   lines: PosOrderLine[];
   running_subtotal: string;
+  warnings?: string[];
 }
 
 export interface PosBillPayment {
@@ -188,6 +201,9 @@ export interface PosBill {
   discount_percent: string;
   tax_percent: string;
   tax_amount: string;
+  cgst_amount?: string;
+  sgst_amount?: string;
+  tip_amount?: string;
   round_off: string;
   grand_total: string;
   amount_paid?: string;
@@ -289,6 +305,26 @@ export interface PosKotLine {
   item_name: string;
   variation_name: string | null;
   quantity: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  outlet_id: string;
+  name: string;
+  unit: string;
+  current_stock: string;
+  low_stock_threshold: string | null;
+}
+
+export interface InventoryDayBucket {
+  label: string;
+  total_qty: string;
+}
+
+export interface InventoryAnalytics {
+  items: InventoryItem[];
+  usage_by_weekday: InventoryDayBucket[];
+  usage_by_month: InventoryDayBucket[];
 }
 
 export interface PosKot {

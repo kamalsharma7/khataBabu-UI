@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
-import { createTenant } from "../api/platform";
+import { createTenant, listSalesEmployees } from "../api/platform";
 import { CredentialsModal } from "../components/CredentialsModal";
 import type {
   BusinessType,
   OperatingModel,
   PlanTier,
   TenantOnboardingPayload,
+  SalesEmployee,
   TenantOnboardingResult,
   VenueKind,
 } from "../types/platform";
@@ -82,6 +83,16 @@ export function OnboardingPage() {
   const [venueKinds, setVenueKinds] = useState<VenueKind[]>(["dining"]);
   const [timeBasedBilling, setTimeBasedBilling] = useState(false);
   const [roughScale, setRoughScale] = useState("");
+  const [salesEmployees, setSalesEmployees] = useState<SalesEmployee[]>([]);
+  const [assignedSalesId, setAssignedSalesId] = useState("");
+  const [adminSeats, setAdminSeats] = useState("0");
+  const [workerSeats, setWorkerSeats] = useState("0");
+
+  useEffect(() => {
+    void listSalesEmployees(true)
+      .then(setSalesEmployees)
+      .catch(() => setSalesEmployees([]));
+  }, []);
 
   const toggleOperating = (value: OperatingModel) => {
     setOperatingModels((prev) =>
@@ -125,6 +136,11 @@ export function OnboardingPage() {
       venue_kinds: venueKinds,
       time_based_billing_enabled: timeBasedBilling,
       rough_scale_notes: roughScale.trim() || null,
+    },
+    assigned_sales_employee_id: assignedSalesId || null,
+    staff: {
+      admin_seats: Math.min(5, Math.max(0, parseInt(adminSeats, 10) || 0)),
+      worker_seats: Math.min(20, Math.max(0, parseInt(workerSeats, 10) || 0)),
     },
   });
 
@@ -347,6 +363,46 @@ export function OnboardingPage() {
               <span>Rough scale (optional)</span>
               <input value={roughScale} onChange={(e) => setRoughScale(e.target.value)} placeholder="e.g. 12 tables, 3 snooker tables" />
             </label>
+            <label className="field field--full">
+              <span>Assigned sales / support contact</span>
+              <select
+                value={assignedSalesId}
+                onChange={(e) => setAssignedSalesId(e.target.value)}
+              >
+                <option value="">— Not assigned —</option>
+                {salesEmployees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.full_name} ({e.employee_code}) · {e.mobile}
+                  </option>
+                ))}
+              </select>
+              {salesEmployees.length === 0 && (
+                <span className="field-hint">Add employees under Platform → Sales team first.</span>
+              )}
+            </label>
+            <label className="field">
+              <span>Extra admin logins (overview + menu)</span>
+              <input
+                type="number"
+                min={0}
+                max={5}
+                value={adminSeats}
+                onChange={(e) => setAdminSeats(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Worker / billing-only logins</span>
+              <input
+                type="number"
+                min={0}
+                max={20}
+                value={workerSeats}
+                onChange={(e) => setWorkerSeats(e.target.value)}
+              />
+            </label>
+            <p className="field-hint field--full">
+              Owner login is always created. Admin and worker credentials are shown once after submit (like the owner password).
+            </p>
           </div>
         )}
 

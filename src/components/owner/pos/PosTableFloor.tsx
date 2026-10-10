@@ -6,6 +6,7 @@ type Props = {
   loading: boolean;
   onSelectTable: (table: FloorTableStatus) => void;
   onViewOrder: (table: FloorTableStatus) => void;
+  onNewDelivery: () => void;
 };
 
 function tableClass(t: FloorTableStatus): string {
@@ -22,16 +23,27 @@ function tableClass(t: FloorTableStatus): string {
   }
 }
 
-export function PosTableFloor({ areas, loading, onSelectTable, onViewOrder }: Props) {
+export function PosTableFloor({
+  areas,
+  loading,
+  onSelectTable,
+  onViewOrder,
+  onNewDelivery,
+}: Props) {
   return (
     <div className="pp-floor">
       <div className="pp-floor-top">
         <h1 className="pp-floor-title">Billing</h1>
-        <div className="pp-legend">
-          <span><i className="pp-legend-swatch pp-legend-swatch--blank" /> Blank</span>
-          <span><i className="pp-legend-swatch pp-legend-swatch--running" /> Running</span>
-          <span><i className="pp-legend-swatch pp-legend-swatch--kot" /> Running KOT</span>
-          <span><i className="pp-legend-swatch pp-legend-swatch--printed" /> Bill printed</span>
+        <div className="pp-floor-top__right">
+          <button type="button" className="btn btn-primary" onClick={onNewDelivery}>
+            + New delivery order
+          </button>
+          <div className="pp-legend">
+            <span><i className="pp-legend-swatch pp-legend-swatch--blank" /> Blank</span>
+            <span><i className="pp-legend-swatch pp-legend-swatch--running" /> Running</span>
+            <span><i className="pp-legend-swatch pp-legend-swatch--kot" /> Running KOT</span>
+            <span><i className="pp-legend-swatch pp-legend-swatch--printed" /> Bill saved</span>
+          </div>
         </div>
       </div>
 

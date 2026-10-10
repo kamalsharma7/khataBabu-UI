@@ -34,6 +34,9 @@ export function PlatformLayout() {
             <NavLink to="/platform/onboard" className="platform-nav__link">
               New onboarding
             </NavLink>
+            <NavLink to="/platform/employees" className="platform-nav__link">
+              Sales team
+            </NavLink>
           </nav>
           <p className="platform-sidebar__note">
             Internal use only. Owner and staff apps do not include this console.

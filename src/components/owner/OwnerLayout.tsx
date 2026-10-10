@@ -8,6 +8,9 @@ export function OwnerLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isPos = location.pathname.startsWith("/app/pos");
+  const canOverview = profile?.permissions?.includes("analytics.overview") ?? true;
+  const canMenu = profile?.permissions?.includes("pos.menu") ?? true;
+  const canFloor = profile?.permissions?.includes("pos.floor") ?? true;
 
   const handleLogout = () => {
     logout();
@@ -43,7 +46,21 @@ export function OwnerLayout() {
           )}
         </div>
         <div className="platform-header__meta">
+          {profile?.support_contact_mobile && (
+            <a
+              className="owner-support-chip"
+              href={`tel:${profile.support_contact_mobile}`}
+              title={profile.support_contact_name ?? "KhataBabu support"}
+            >
+              Support {profile.support_contact_mobile}
+            </a>
+          )}
           <span className="platform-header__user">{profile?.full_name}</span>
+          {!profile?.must_change_password && (
+            <Link to="/app/change-password" className="btn btn-ghost btn-sm">
+              Password
+            </Link>
+          )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleLogout}>
             Sign out
           </button>
@@ -57,18 +74,24 @@ export function OwnerLayout() {
             <NavLink to="/app" end className="platform-nav__link">
               Welcome
             </NavLink>
+            {canOverview && (
             <NavLink to="/app/overview" className="platform-nav__link">
               Overview
             </NavLink>
+            )}
             <NavLink to="/app/pos" className="platform-nav__link platform-nav__link--primary">
               Billing
             </NavLink>
+            {canFloor && (
             <NavLink to="/app/floor" className="platform-nav__link">
               Table setup
             </NavLink>
+            )}
+            {canMenu && (
             <NavLink to="/app/menu" className="platform-nav__link">
               Menu
             </NavLink>
+            )}
           </nav>
           {outlet && (
             <p className="platform-sidebar__note">

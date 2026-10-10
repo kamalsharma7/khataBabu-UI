@@ -8,12 +8,15 @@ import { OwnerAuthProvider } from "./context/OwnerAuthContext";
 import { OwnerOutletProvider } from "./context/OwnerOutletContext";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { PlatformSalesEmployeesPage } from "./pages/PlatformSalesEmployeesPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import { OwnerChangePasswordPage } from "./pages/owner/OwnerChangePasswordPage";
 import { OwnerDashboardPage } from "./pages/owner/OwnerDashboardPage";
 import { OwnerOverviewPage } from "./pages/owner/OwnerOverviewPage";
 import { OwnerFloorPage } from "./pages/owner/OwnerFloorPage";
+import { OwnerForgotPasswordPage } from "./pages/owner/OwnerForgotPasswordPage";
 import { OwnerLoginPage } from "./pages/owner/OwnerLoginPage";
+import { OwnerResetPasswordPage } from "./pages/owner/OwnerResetPasswordPage";
 import { OwnerMenuPage } from "./pages/owner/OwnerMenuPage";
 import { OwnerPosPage } from "./pages/owner/OwnerPosPage";
 
@@ -24,6 +27,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/app/login" replace />} />
           <Route path="/app/login" element={<OwnerLoginPage />} />
+          <Route path="/app/forgot-password" element={<OwnerForgotPasswordPage />} />
+          <Route path="/app/reset-password" element={<OwnerResetPasswordPage />} />
           <Route path="/app/change-password" element={<OwnerChangePasswordPage />} />
           <Route element={<OwnerProtectedRoute />}>
             <Route
@@ -46,6 +51,7 @@ export default function App() {
               <Route index element={<Navigate to="tenants" replace />} />
               <Route path="tenants" element={<TenantsPage />} />
               <Route path="onboard" element={<OnboardingPage />} />
+              <Route path="employees" element={<PlatformSalesEmployeesPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/app/login" replace />} />

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ownerChangePassword } from "../../api/owner";
 import { OwnerApiError } from "../../api/ownerClient";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
@@ -24,9 +24,7 @@ export function OwnerChangePasswordPage() {
     return <Navigate to="/app/login" replace />;
   }
 
-  if (!profile.must_change_password) {
-    return <Navigate to="/app" replace />;
-  }
+  const forced = profile.must_change_password;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -50,11 +48,15 @@ export function OwnerChangePasswordPage() {
       </header>
       <div className="login-content">
         <div className="login-card card">
-          <h1>Set a new password</h1>
-          <p className="muted">Your temporary password must be changed before continuing.</p>
+          <h1>{forced ? "Set a new password" : "Change password"}</h1>
+          <p className="muted">
+            {forced
+              ? "Your temporary password must be changed before continuing."
+              : "Enter your current password and choose a new one (min 12 characters)."}
+          </p>
           <form onSubmit={onSubmit} className="form-stack">
             <label className="field">
-              <span>Current (temporary) password</span>
+              <span>Current password</span>
               <input
                 type="password"
                 value={current}
@@ -76,6 +78,9 @@ export function OwnerChangePasswordPage() {
             <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
               {submitting ? "Saving…" : "Update password"}
             </button>
+            {!forced && (
+              <Link to="/app" className="muted" style={{ textAlign: "center" }}>Back to app</Link>
+            )}
           </form>
         </div>
       </div>

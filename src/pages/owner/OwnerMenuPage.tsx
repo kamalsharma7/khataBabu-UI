@@ -29,8 +29,14 @@ const emptyVariation = (defaultSize = false): VariationRow => ({
   name: "",
   price: "",
   is_default: defaultSize,
+  weight_grams: "",
 });
-const emptyAddon = (): AddonRow => ({ name: "", price: "" });
+const emptyAddon = (): AddonRow => ({ name: "", price: "", weight_grams: "" });
+
+function parseWeightGrams(raw: string): number | null {
+  const n = parseInt(raw.trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 function rowsToVariations(rows: VariationRow[]): MenuVariationInput[] {
   const filled = rows.filter((r) => r.name.trim());
@@ -39,6 +45,7 @@ function rowsToVariations(rows: VariationRow[]): MenuVariationInput[] {
     price: parseFloat(r.price) || 0,
     sort_order: i,
     is_default: r.is_default,
+    weight_grams: parseWeightGrams(r.weight_grams),
   }));
 }
 
@@ -49,6 +56,7 @@ function rowsToAddons(rows: AddonRow[]): MenuAddonInput[] {
     price: parseFloat(r.price) || 0,
     sort_order: i,
     is_available: true,
+    weight_grams: parseWeightGrams(r.weight_grams),
   }));
 }
 
@@ -58,12 +66,17 @@ function itemToVariationRows(item: MenuItem): VariationRow[] {
     name: v.name,
     price: String(v.price),
     is_default: v.is_default,
+    weight_grams: v.weight_grams != null ? String(v.weight_grams) : "",
   }));
 }
 
 function itemToAddonRows(item: MenuItem): AddonRow[] {
   if (!item.addons?.length) return [emptyAddon()];
-  return item.addons.map((a) => ({ name: a.name, price: String(a.price) }));
+  return item.addons.map((a) => ({
+    name: a.name,
+    price: String(a.price),
+    weight_grams: a.weight_grams != null ? String(a.weight_grams) : "",
+  }));
 }
 
 function dietStripeClass(item: MenuItem): string {
@@ -98,6 +111,9 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
     price: "",
     short_code: "",
     food_type: "veg" as "veg" | "non_veg" | "egg",
+    gst_applicable: false,
+    cgst_percent: "2.5",
+    sgst_percent: "2.5",
   });
   const [newVariations, setNewVariations] = useState<VariationRow[]>([emptyVariation(true)]);
   const [newAddons, setNewAddons] = useState<AddonRow[]>([emptyAddon()]);
@@ -175,6 +191,9 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
         short_code: itemForm.short_code.trim() || null,
         food_type: itemForm.food_type,
         is_veg: itemForm.food_type !== "non_veg",
+        gst_applicable: itemForm.gst_applicable,
+        cgst_percent: parseFloat(itemForm.cgst_percent) || 0,
+        sgst_percent: parseFloat(itemForm.sgst_percent) || 0,
         variations,
         addons,
       });
@@ -443,6 +462,42 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
                         <option value="non_veg">Non-veg</option>
                       </select>
                     </label>
+                    <label className="field field--checkbox">
+                      <input
+                        type="checkbox"
+                        checked={itemForm.gst_applicable}
+                        onChange={(e) =>
+                          setItemForm({ ...itemForm, gst_applicable: e.target.checked })
+                        }
+                      />
+                      <span>GST applicable (CGST + SGST)</span>
+                    </label>
+                    {itemForm.gst_applicable && (
+                      <>
+                        <label className="field">
+                          <span>CGST %</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={itemForm.cgst_percent}
+                            onChange={(e) =>
+                              setItemForm({ ...itemForm, cgst_percent: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>SGST %</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={itemForm.sgst_percent}
+                            onChange={(e) =>
+                              setItemForm({ ...itemForm, sgst_percent: e.target.value })
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
                   </div>
 
                   <MenuModifierFields

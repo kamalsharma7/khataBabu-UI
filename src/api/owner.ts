@@ -34,6 +34,10 @@ export interface OwnerProfile {
   business_name: string;
   business_status: string;
   must_change_password: boolean;
+  role?: string;
+  permissions?: string[];
+  support_contact_name?: string | null;
+  support_contact_mobile?: string | null;
 }
 
 export function ownerLogin(username: string, password: string) {
@@ -52,6 +56,22 @@ export function ownerChangePassword(current: string, newPassword: string) {
   return ownerApiRequest<void>("/owner/auth/change-password", {
     method: "POST",
     body: JSON.stringify({ current_password: current, new_password: newPassword }),
+  });
+}
+
+export function ownerForgotPassword(username: string) {
+  return ownerApiRequest<void>("/owner/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ username }),
+    auth: false,
+  });
+}
+
+export function ownerResetPassword(token: string, newPassword: string) {
+  return ownerApiRequest<void>("/owner/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+    auth: false,
   });
 }
 
@@ -191,6 +211,9 @@ export function createMenuItem(
     food_type?: "veg" | "non_veg" | "egg";
     is_available?: boolean;
     sort_order?: number;
+    gst_applicable?: boolean;
+    cgst_percent?: number;
+    sgst_percent?: number;
     variations?: MenuVariationInput[];
     addons?: MenuAddonInput[];
   },
@@ -255,12 +278,23 @@ export function posGetBill(outletId: string, orderId: string) {
 
 export function posCreateOrder(
   outletId: string,
-  body: { order_type?: string; venue_table_id: string; guest_count?: number },
+  body: {
+    order_type?: "dine_in" | "takeaway" | "delivery";
+    venue_table_id?: string | null;
+    guest_count?: number;
+    notes?: string | null;
+  },
 ) {
   return ownerApiRequest<PosOrder>(`/owner/outlets/${outletId}/pos/orders`, {
     method: "POST",
     body: JSON.stringify({ order_type: "dine_in", ...body }),
   });
+}
+
+export function posListOrders(outletId: string, orderStatus: "open" | "settled" | "cancelled" = "open") {
+  return ownerApiRequest<PosOrder[]>(
+    `/owner/outlets/${outletId}/pos/orders?order_status=${orderStatus}`,
+  );
 }
 
 export function posGetOrder(outletId: string, orderId: string) {
@@ -272,8 +306,11 @@ export function posUpdateOrder(
   orderId: string,
   body: {
     guest_count?: number;
+    order_type?: string;
     customer_name?: string | null;
     customer_mobile?: string | null;
+    customer_locality?: string | null;
+    customer_relation?: string | null;
     pay_later?: boolean;
     notes?: string | null;
     time_duration_minutes?: number;
@@ -398,6 +435,32 @@ export function posSplitBillPreview(
   );
 }
 
+export function posSaveBill(
+  outletId: string,
+  orderId: string,
+  body: {
+    discount_amount?: number;
+    discount_percent?: number;
+    tax_percent?: number;
+    tip_amount?: number;
+    round_to_rupee?: boolean;
+    print_after_save?: boolean;
+  },
+) {
+  return ownerApiRequest<PosBill>(`/owner/outlets/${outletId}/pos/orders/${orderId}/save-bill`, {
+    method: "POST",
+    body: JSON.stringify({
+      discount_amount: 0,
+      discount_percent: 0,
+      tax_percent: 0,
+      tip_amount: 0,
+      round_to_rupee: true,
+      print_after_save: false,
+      ...body,
+    }),
+  });
+}
+
 export function posCreateBill(
   outletId: string,
   orderId: string,
@@ -405,6 +468,7 @@ export function posCreateBill(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    tip_amount?: number;
     round_to_rupee?: boolean;
   },
 ) {
@@ -437,6 +501,7 @@ export function posSettleBill(
       discount_amount: 0,
       discount_percent: 0,
       tax_percent: 0,
+      tip_amount: 0,
       round_to_rupee: true,
       ...body,
     }),
@@ -479,6 +544,28 @@ export function analyticsSummary(
   return ownerApiRequest<import("../types/owner").AnalyticsSummary>(
     `/owner/outlets/${outletId}/analytics/summary?${analyticsQuery(fromIso, toIso)}`,
     { analyticsToken },
+  );
+}
+
+export function listInventoryItems(outletId: string) {
+  return ownerApiRequest<import("../types/owner").InventoryItem[]>(
+    `/owner/outlets/${outletId}/inventory`,
+  );
+}
+
+export function createInventoryItem(
+  outletId: string,
+  body: { name: string; unit?: string; opening_stock?: number },
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem>(
+    `/owner/outlets/${outletId}/inventory`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function fetchInventoryAnalytics(outletId: string, days = 90) {
+  return ownerApiRequest<import("../types/owner").InventoryAnalytics>(
+    `/owner/outlets/${outletId}/inventory/analytics?days=${days}`,
   );
 }
 
