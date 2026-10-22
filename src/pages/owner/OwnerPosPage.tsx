@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PosBillingNav, type PosBillingSection } from "../../components/owner/pos/PosBillingNav";
+import { PosToolDrawer } from "../../components/owner/pos/PosToolDrawer";
+import { PosTopToolbar, type PosToolDrawerId } from "../../components/owner/pos/PosTopToolbar";
+import { OwnerSettingsPage } from "./OwnerSettingsPage";
+import { OwnerAuditLogPage } from "./OwnerAuditLogPage";
 import { PosBillsPanel } from "../../components/owner/pos/PosBillsPanel";
 import { PosOpenLineModal } from "../../components/owner/pos/PosOpenLineModal";
 import { PosItemPickerModal } from "../../components/owner/pos/PosItemPickerModal";
+import {
+  availableVariations,
+  defaultVariationId,
+  needsModifierPicker,
+} from "../../components/owner/menu/modifierUtils";
 import { PosOrderScreen } from "../../components/owner/pos/PosOrderScreen";
 import { PosSettleModal } from "../../components/owner/pos/PosSettleModal";
 import { OwnerInventoryPage } from "./OwnerInventoryPage";
@@ -38,9 +47,12 @@ import {
   posSettleBill,
   posUpdateOrder,
   posUpdateLine,
+  fetchDiscountPolicy,
 } from "../../api/owner";
 import { OwnerApiError } from "../../api/ownerClient";
+import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import type { DiscountPolicy } from "../../types/owner";
 import type {
   FloorTableStatus,
   MenuItem,
@@ -54,6 +66,8 @@ import type {
 
 export function OwnerPosPage() {
   const { outlet } = useOwnerOutlet();
+  const { profile } = useOwnerAuth();
+  const perms = profile?.permissions ?? [];
   const [screen, setScreen] = useState<"floor" | "order">("floor");
   const [floor, setFloor] = useState<Awaited<ReturnType<typeof posFloor>> | null>(null);
   const [categories, setCategories] = useState<Awaited<ReturnType<typeof listMenuCategories>>>([]);
@@ -88,6 +102,9 @@ export function OwnerPosPage() {
   const [billingSection, setBillingSection] = useState<PosBillingSection>("tables");
   const [bills, setBills] = useState<PosBillListEntry[]>([]);
   const [billsLoading, setBillsLoading] = useState(false);
+  const [discountPolicy, setDiscountPolicy] = useState<DiscountPolicy | null>(null);
+  const [managerPin, setManagerPin] = useState("");
+  const [toolDrawer, setToolDrawer] = useState<PosToolDrawerId | null>(null);
 
   const billPreviewBody = useCallback(
     () => ({
@@ -96,8 +113,9 @@ export function OwnerPosPage() {
       discount_amount: parseFloat(discountAmount) || 0,
       tip_amount: parseFloat(tipAmount) || 0,
       round_to_rupee: true,
+      manager_approval_pin: managerPin.trim() || undefined,
     }),
-    [taxPercent, discountPercent, discountAmount, tipAmount],
+    [taxPercent, discountPercent, discountAmount, tipAmount, managerPin],
   );
 
   const loadOrderExtras = useCallback(
@@ -136,9 +154,6 @@ export function OwnerPosPage() {
           "lines" in apiResult
             ? (apiResult as PosOrder)
             : await posGetOrder(outletId, orderId);
-        if (fresh.warnings?.length) {
-          setInventoryNotice(fresh.warnings.join(" · "));
-        }
         setOrder(fresh);
         try {
           setBill(await posGetBill(outletId, orderId));
@@ -403,6 +418,7 @@ export function OwnerPosPage() {
   }, [outlet]);
 
   const onBillingNavSelect = (section: PosBillingSection) => {
+    setToolDrawer(null);
     setBillingSection(section);
     if (section === "tables") {
       void goToTableView();
@@ -449,18 +465,16 @@ export function OwnerPosPage() {
 
   const onMenuItemClick = (item: MenuItem) => {
     if (!order) return;
-    const needsPicker =
-      (item.variations?.length ?? 0) > 0 ||
-      (item.addons?.filter((a) => a.is_available).length ?? 0) > 0;
-    if (needsPicker) {
-      const def = item.variations?.find((v) => v.is_default) ?? item.variations?.[0];
-      setPickerItem(item);
-      setPickerVariationId(def?.id ?? "");
-      setPickerAddonIds([]);
-      setPickerQty(1);
-    } else {
-      void addLineDirect(item, null, [], 1);
+    const vars = availableVariations(item);
+    if (!needsModifierPicker(item)) {
+      const variationId = vars.length === 1 ? defaultVariationId(item, vars) : null;
+      void addLineDirect(item, variationId, [], 1);
+      return;
     }
+    setPickerItem(item);
+    setPickerVariationId(defaultVariationId(item, vars) ?? "");
+    setPickerAddonIds([]);
+    setPickerQty(1);
   };
 
   const saveCurrentBill = async (printAfter: boolean) => {
@@ -516,7 +530,11 @@ export function OwnerPosPage() {
       await posSendKot(outlet.id, orderId);
       await backToFloor();
     } catch (err) {
-      setError(err instanceof OwnerApiError ? err.message : "KOT failed");
+      const msg = err instanceof OwnerApiError ? err.message : "KOT failed";
+      setError(msg);
+      if (err instanceof OwnerApiError && err.status === 409) {
+        setInventoryNotice(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -652,6 +670,14 @@ export function OwnerPosPage() {
       if (b) {
         const due = money(b.balance_due ?? b.grand_total);
         setPayments([{ method: "cash", amount: due.toFixed(2), reference: "" }]);
+        setManagerPin("");
+        if (outlet) {
+          try {
+            setDiscountPolicy(await fetchDiscountPolicy(outlet.id));
+          } catch {
+            setDiscountPolicy(null);
+          }
+        }
         setSettleOpen(true);
       }
     } catch (err) {
@@ -735,11 +761,33 @@ export function OwnerPosPage() {
         active={billingSection}
         onToggle={() => setNavOpen((o) => !o)}
         onSelect={onBillingNavSelect}
+        allowSetup={perms.includes("pos.floor")}
+        allowMenu={perms.includes("pos.menu")}
+        allowInventory={perms.includes("pos.inventory")}
+        allowBills={perms.includes("pos.bills")}
       />
       <div className="pp-billing-main">
+        <PosTopToolbar
+          activeSection={billingSection}
+          openDrawer={toolDrawer}
+          outletRef={outlet.ref_code}
+          permissions={perms}
+          onSection={onBillingNavSelect}
+          onDrawer={setToolDrawer}
+        />
+        {toolDrawer === "settings" && (
+          <PosToolDrawer title="Outlet &amp; invoice settings" onClose={() => setToolDrawer(null)}>
+            <OwnerSettingsPage />
+          </PosToolDrawer>
+        )}
+        {toolDrawer === "audit" && (
+          <PosToolDrawer title="Audit log" onClose={() => setToolDrawer(null)}>
+            <OwnerAuditLogPage />
+          </PosToolDrawer>
+        )}
         {inventoryNotice && (
           <p className="pp-inventory-notice" role="status">
-            Low stock: {inventoryNotice}
+            {inventoryNotice}
           </p>
         )}
         {error && <p className="form-error pp-root-error">{error}</p>}
@@ -755,18 +803,21 @@ export function OwnerPosPage() {
             outletId={outlet.id}
             bills={bills}
             loading={billsLoading}
+            canRefund={perms.includes("pos.refund")}
             onRefresh={() => void loadBills()}
           />
         )}
 
         {billingSection === "tables" && !showOrderScreen && (
-          <PosTableFloor
-            areas={floor?.areas ?? []}
-            loading={loading}
-            onSelectTable={handleSelectTable}
-            onViewOrder={handleSelectTable}
-            onNewDelivery={() => void openDeliveryOrder()}
-          />
+          <div className="pp-floor-wrap">
+            <PosTableFloor
+              areas={floor?.areas ?? []}
+              loading={loading}
+              onSelectTable={handleSelectTable}
+              onViewOrder={handleSelectTable}
+              onNewDelivery={() => void openDeliveryOrder()}
+            />
+          </div>
         )}
 
         {showOrderScreen && (
@@ -827,7 +878,7 @@ export function OwnerPosPage() {
           gstHint={gstHint}
           onSaveOrderDetails={(patch) => void saveOrderDetails(patch)}
           isTimeBased={isTimeTable}
-          tableHourlyRate={selectedTable?.hourly_rate ?? null}
+          canManageTimeBilling={perms.includes("settings.all")}
           onTimeSessionApply={(patch) => void applyTimeSession(patch)}
           onCancelOrder={() => void cancelCurrentOrder()}
         />
@@ -855,8 +906,8 @@ export function OwnerPosPage() {
           onAddonIds={setPickerAddonIds}
           onQty={setPickerQty}
           onClose={() => setPickerItem(null)}
-          onConfirm={() =>
-            void addLineDirect(pickerItem, pickerVariationId || null, pickerAddonIds, pickerQty)
+          onConfirm={(sel) =>
+            void addLineDirect(pickerItem, sel.variationId, sel.addonIds, sel.qty)
           }
         />
       )}
@@ -880,6 +931,9 @@ export function OwnerPosPage() {
           onPaymentsChange={setPayments}
           onClose={() => setSettleOpen(false)}
           onComplete={() => void settle()}
+          discountPolicy={discountPolicy}
+          managerPin={managerPin}
+          onManagerPin={setManagerPin}
         />
       )}
     </div>

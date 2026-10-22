@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { listTenants, updateTenantStatus } from "../api/platform";
+import { TenantDetailModal } from "../components/platform/TenantDetailModal";
 import type { TenantStatus, TenantSummary } from "../types/platform";
 
 export function TenantsPage() {
@@ -12,6 +13,7 @@ export function TenantsPage() {
   const [confirmUsername, setConfirmUsername] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [suspendError, setSuspendError] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,7 +84,7 @@ export function TenantsPage() {
 
       {tenants.length > 0 && (
         <div className="table-wrap card">
-          <table className="data-table">
+          <table className="data-table data-table--clickable">
             <thead>
               <tr>
                 <th>Business</th>
@@ -96,7 +98,12 @@ export function TenantsPage() {
             </thead>
             <tbody>
               {tenants.map((t) => (
-                <tr key={t.business_id}>
+                <tr
+                  key={t.business_id}
+                  onClick={() => setDetailId(t.business_id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && setDetailId(t.business_id)}
+                >
                   <td>
                     <strong>{t.legal_name}</strong>
                     <div className="table-sub">{t.primary_email}</div>
@@ -108,7 +115,7 @@ export function TenantsPage() {
                   <td>
                     <span className={`status-pill status-${t.status}`}>{t.status}</span>
                   </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <select
                       className="select-sm"
                       value={t.status}
@@ -125,6 +132,14 @@ export function TenantsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {detailId && (
+        <TenantDetailModal
+          businessId={detailId}
+          onClose={() => setDetailId(null)}
+          onSaved={() => void load()}
+        />
       )}
 
       {suspendTarget && (

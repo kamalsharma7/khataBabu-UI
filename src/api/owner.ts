@@ -1,4 +1,4 @@
-import { ownerApiRequest } from "./ownerClient";
+import { getOwnerToken, ownerApiRequest } from "./ownerClient";
 import type {
   FloorStatusResponse,
   MenuAddonInput,
@@ -319,6 +319,7 @@ export function posUpdateOrder(
     time_session_start?: string;
     time_session_end?: string;
     clear_time_session?: boolean;
+    time_billing_excluded?: boolean;
   },
 ) {
   return ownerApiRequest<PosOrder>(`/owner/outlets/${outletId}/pos/orders/${orderId}`, {
@@ -491,7 +492,9 @@ export function posSettleBill(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    tip_amount?: number;
     round_to_rupee?: boolean;
+    manager_approval_pin?: string;
     payments: { method: PaymentMethod; amount: number; reference?: string | null }[];
   },
 ) {
@@ -547,15 +550,29 @@ export function analyticsSummary(
   );
 }
 
-export function listInventoryItems(outletId: string) {
+export function listInventoryItems(
+  outletId: string,
+  kind: import("../types/owner").InventoryKind = "all",
+) {
+  const q = kind === "all" ? "" : `?kind=${kind}`;
   return ownerApiRequest<import("../types/owner").InventoryItem[]>(
-    `/owner/outlets/${outletId}/inventory`,
+    `/owner/outlets/${outletId}/inventory${q}`,
   );
 }
 
 export function createInventoryItem(
   outletId: string,
-  body: { name: string; unit?: string; opening_stock?: number },
+  body: {
+    name: string;
+    unit?: string;
+    daily_par?: number;
+    tracks_daily?: boolean;
+    category?: string;
+    cost_per_unit?: number | null;
+    notes?: string | null;
+    low_stock_threshold?: number | null;
+    opening_stock?: number;
+  },
 ) {
   return ownerApiRequest<import("../types/owner").InventoryItem>(
     `/owner/outlets/${outletId}/inventory`,
@@ -563,9 +580,286 @@ export function createInventoryItem(
   );
 }
 
-export function fetchInventoryAnalytics(outletId: string, days = 90) {
-  return ownerApiRequest<import("../types/owner").InventoryAnalytics>(
-    `/owner/outlets/${outletId}/inventory/analytics?days=${days}`,
+export function updateInventoryItem(
+  outletId: string,
+  itemId: string,
+  body: {
+    name?: string;
+    unit?: string;
+    category?: string;
+    cost_per_unit?: number | null;
+    notes?: string | null;
+    low_stock_threshold?: number | null;
+  },
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem>(
+    `/owner/outlets/${outletId}/inventory/${itemId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+export function adjustInventoryStock(
+  outletId: string,
+  itemId: string,
+  body: {
+    reason: import("../types/owner").StockAdjustReason;
+    quantity: number;
+    notes?: string | null;
+  },
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem>(
+    `/owner/outlets/${outletId}/inventory/${itemId}/adjust`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function listInventoryTransactions(outletId: string, itemId: string) {
+  return ownerApiRequest<import("../types/owner").InventoryTransaction[]>(
+    `/owner/outlets/${outletId}/inventory/${itemId}/transactions`,
+  );
+}
+
+export function listPurchases(
+  outletId: string,
+  filters: {
+    fromDate?: string;
+    toDate?: string;
+    vendor?: string;
+    invoiceNumber?: string;
+    paymentStatus?: string;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  if (filters.fromDate) params.set("from_date", filters.fromDate);
+  if (filters.toDate) params.set("to_date", filters.toDate);
+  if (filters.vendor) params.set("vendor", filters.vendor);
+  if (filters.invoiceNumber) params.set("invoice_number", filters.invoiceNumber);
+  if (filters.paymentStatus && filters.paymentStatus !== "all") {
+    params.set("payment_status", filters.paymentStatus);
+  }
+  const q = params.toString();
+  return ownerApiRequest<import("../types/owner").PurchaseListResponse>(
+    `/owner/outlets/${outletId}/purchases${q ? `?${q}` : ""}`,
+  );
+}
+
+export function getPurchase(outletId: string, invoiceId: string) {
+  return ownerApiRequest<import("../types/owner").PurchaseInvoiceDetail>(
+    `/owner/outlets/${outletId}/purchases/${invoiceId}`,
+  );
+}
+
+export function createPurchase(
+  outletId: string,
+  body: import("../types/owner").PurchaseInvoiceCreate,
+) {
+  return ownerApiRequest<import("../types/owner").PurchaseInvoiceDetail>(
+    `/owner/outlets/${outletId}/purchases`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function updatePurchase(
+  outletId: string,
+  invoiceId: string,
+  body: {
+    vendor_name?: string;
+    vendor_phone?: string | null;
+    vendor_gstin?: string | null;
+    invoice_number?: string | null;
+    invoice_date?: string;
+    po_reference?: string | null;
+    notes?: string | null;
+  },
+) {
+  return ownerApiRequest<import("../types/owner").PurchaseInvoiceDetail>(
+    `/owner/outlets/${outletId}/purchases/${invoiceId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+export function deletePurchase(outletId: string, invoiceId: string) {
+  return ownerApiRequest<void>(`/owner/outlets/${outletId}/purchases/${invoiceId}`, {
+    method: "DELETE",
+  });
+}
+
+export function addPurchasePayment(
+  outletId: string,
+  invoiceId: string,
+  body: {
+    amount_inr: number;
+    payment_mode: import("../types/owner").PurchasePaymentMode;
+    paid_on?: string;
+    reference?: string | null;
+    notes?: string | null;
+  },
+) {
+  return ownerApiRequest<import("../types/owner").PurchaseInvoiceDetail>(
+    `/owner/outlets/${outletId}/purchases/${invoiceId}/payments`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function applyPurchaseStock(outletId: string, invoiceId: string) {
+  return ownerApiRequest<import("../types/owner").PurchaseInvoiceDetail>(
+    `/owner/outlets/${outletId}/purchases/${invoiceId}/apply-stock`,
+    { method: "POST" },
+  );
+}
+
+// ---- CRM / customers ----
+
+export function lookupCustomer(outletId: string, phone: string) {
+  return ownerApiRequest<import("../types/owner").CustomerLookupResponse>(
+    `/owner/outlets/${outletId}/customers/lookup?phone=${encodeURIComponent(phone)}`,
+  );
+}
+
+export function searchCustomers(outletId: string, q: string) {
+  return ownerApiRequest<import("../types/owner").CustomerSummary[]>(
+    `/owner/outlets/${outletId}/customers/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
+export function listCustomers(
+  outletId: string,
+  filters: { q?: string; segment?: string; sort?: string; tag?: string; limit?: number; offset?: number } = {},
+) {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.segment && filters.segment !== "all") params.set("segment", filters.segment);
+  if (filters.sort) params.set("sort", filters.sort);
+  if (filters.tag) params.set("tag", filters.tag);
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.offset) params.set("offset", String(filters.offset));
+  const q = params.toString();
+  return ownerApiRequest<import("../types/owner").CustomerListResponse>(
+    `/owner/outlets/${outletId}/customers${q ? `?${q}` : ""}`,
+  );
+}
+
+export function getCustomer(outletId: string, customerId: string) {
+  return ownerApiRequest<import("../types/owner").CustomerDetail>(
+    `/owner/outlets/${outletId}/customers/${customerId}`,
+  );
+}
+
+export function createCustomer(outletId: string, body: import("../types/owner").CustomerWrite) {
+  return ownerApiRequest<import("../types/owner").CustomerDetail>(
+    `/owner/outlets/${outletId}/customers`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function updateCustomer(
+  outletId: string,
+  customerId: string,
+  body: import("../types/owner").CustomerWrite,
+) {
+  return ownerApiRequest<import("../types/owner").CustomerDetail>(
+    `/owner/outlets/${outletId}/customers/${customerId}`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+}
+
+export function deleteCustomer(outletId: string, customerId: string) {
+  return ownerApiRequest<void>(`/owner/outlets/${outletId}/customers/${customerId}`, {
+    method: "DELETE",
+  });
+}
+
+export function crmInsights(outletId: string) {
+  return ownerApiRequest<import("../types/owner").CrmInsights>(
+    `/owner/outlets/${outletId}/customers/insights`,
+  );
+}
+
+export function backfillCustomers(outletId: string) {
+  return ownerApiRequest<import("../types/owner").CustomerBackfillResult>(
+    `/owner/outlets/${outletId}/customers/backfill`,
+    { method: "POST" },
+  );
+}
+
+export function replaceRecipeBom(
+  outletId: string,
+  menuItemId: string,
+  lines: { inventory_item_id: string; qty_per_serve: number }[],
+) {
+  return ownerApiRequest<void>(
+    `/owner/outlets/${outletId}/inventory/menu-items/${menuItemId}/recipe-bom`,
+    { method: "PUT", body: JSON.stringify({ lines }) },
+  );
+}
+
+export function setInventoryDailyStock(
+  outletId: string,
+  itemId: string,
+  quantity: number,
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem>(
+    `/owner/outlets/${outletId}/inventory/${itemId}/daily-stock`,
+    { method: "POST", body: JSON.stringify({ quantity }) },
+  );
+}
+
+export function linkMenuInventory(
+  outletId: string,
+  menuItemId: string,
+  body: { inventory_item_id: string; qty_per_serve?: number },
+) {
+  return ownerApiRequest<void>(
+    `/owner/outlets/${outletId}/inventory/menu-items/${menuItemId}/link`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function trackMenuInventory(
+  outletId: string,
+  body: {
+    menu_item_id: string;
+    unit?: string;
+    qty_per_kot?: number;
+    today_quantity: number;
+  },
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem>(
+    `/owner/outlets/${outletId}/inventory/track-menu`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function deleteInventoryItem(outletId: string, itemId: string) {
+  return ownerApiRequest<void>(`/owner/outlets/${outletId}/inventory/${itemId}`, {
+    method: "DELETE",
+  });
+}
+
+export function unlinkMenuInventory(
+  outletId: string,
+  menuItemId: string,
+  inventoryItemId: string,
+) {
+  return ownerApiRequest<void>(
+    `/owner/outlets/${outletId}/inventory/menu-items/${menuItemId}/link/${inventoryItemId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function bulkSetInventoryDailyStock(
+  outletId: string,
+  items: { inventory_item_id: string; quantity: number }[],
+) {
+  return ownerApiRequest<import("../types/owner").InventoryItem[]>(
+    `/owner/outlets/${outletId}/inventory/daily-stock/bulk`,
+    { method: "POST", body: JSON.stringify({ items }) },
+  );
+}
+
+export function fetchInventorySalesAnalytics(outletId: string, days = 30) {
+  return ownerApiRequest<import("../types/owner").InventorySalesAnalytics>(
+    `/owner/outlets/${outletId}/inventory/sales-analytics?days=${days}`,
   );
 }
 
@@ -581,4 +875,76 @@ export function analyticsOrders(
     `/owner/outlets/${outletId}/analytics/orders?${analyticsQuery(fromIso, toIso)}&offset=${offset}&limit=${limit}`,
     { analyticsToken },
   );
+}
+
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? "/api/v1" : "http://localhost:8000/api/v1");
+
+export function fetchBusinessSettings() {
+  return ownerApiRequest<import("../types/owner").BusinessSettings>("/owner/business/settings");
+}
+
+export function updateBusinessProfile(body: Partial<import("../types/owner").BusinessSettings>) {
+  return ownerApiRequest<import("../types/owner").BusinessSettings>("/owner/business/settings/profile", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updatePosPolicy(body: {
+  worker_max_discount_percent: number;
+  max_discount_percent: number;
+}) {
+  return ownerApiRequest<import("../types/owner").BusinessSettings>("/owner/business/settings/policy", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function setManagerPin(pin: string) {
+  return ownerApiRequest<import("../types/owner").BusinessSettings>("/owner/business/settings/manager-pin", {
+    method: "POST",
+    body: JSON.stringify({ pin }),
+  });
+}
+
+export function fetchDiscountPolicy(outletId: string) {
+  return ownerApiRequest<import("../types/owner").DiscountPolicy>(
+    `/owner/outlets/${outletId}/pos/discount-policy`,
+  );
+}
+
+export function fetchAuditLog(outletId: string, limit = 100) {
+  return ownerApiRequest<{ items: import("../types/owner").AuditLogEntry[] }>(
+    `/owner/outlets/${outletId}/audit-log?limit=${limit}`,
+  );
+}
+
+export function createBillRefund(
+  outletId: string,
+  billId: string,
+  body: { amount: number; method: string; reason: string; manager_approval_pin?: string },
+) {
+  return ownerApiRequest<{
+    id: string;
+    refunded_total: string;
+  }>(`/owner/outlets/${outletId}/pos/bills/${billId}/refunds`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function openBillInvoice(outletId: string, billId: string) {
+  const token = getOwnerToken();
+  const res = await fetch(`${API_BASE}/owner/outlets/${outletId}/pos/bills/${billId}/invoice`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error("Could not load invoice");
+  const html = await res.text();
+  const w = window.open("", "_blank");
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  }
 }

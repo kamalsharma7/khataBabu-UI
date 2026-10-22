@@ -5,6 +5,10 @@ type Props = {
   active: PosBillingSection;
   onToggle: () => void;
   onSelect: (section: PosBillingSection) => void;
+  allowSetup?: boolean;
+  allowMenu?: boolean;
+  allowInventory?: boolean;
+  allowBills?: boolean;
 };
 
 const ITEMS: { id: PosBillingSection; label: string; short: string }[] = [
@@ -15,7 +19,23 @@ const ITEMS: { id: PosBillingSection; label: string; short: string }[] = [
   { id: "bills", label: "All bills", short: "Bills" },
 ];
 
-export function PosBillingNav({ open, active, onToggle, onSelect }: Props) {
+export function PosBillingNav({
+  open,
+  active,
+  onToggle,
+  onSelect,
+  allowSetup = true,
+  allowMenu = true,
+  allowInventory = true,
+  allowBills = true,
+}: Props) {
+  const visible = ITEMS.filter((item) => {
+    if (item.id === "setup") return allowSetup;
+    if (item.id === "menu") return allowMenu;
+    if (item.id === "inventory") return allowInventory;
+    if (item.id === "bills") return allowBills;
+    return true;
+  });
   return (
     <aside
       className={`pp-pos-nav ${open ? "pp-pos-nav--open" : "pp-pos-nav--collapsed"}`}
@@ -32,7 +52,7 @@ export function PosBillingNav({ open, active, onToggle, onSelect }: Props) {
       </button>
       {open && (
         <nav className="pp-pos-nav__links">
-          {ITEMS.map((item) => (
+          {visible.map((item) => (
             <button
               key={item.id}
               type="button"

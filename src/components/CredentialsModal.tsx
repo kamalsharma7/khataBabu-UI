@@ -1,4 +1,5 @@
 import type { TenantOnboardingResult } from "../types/platform";
+import { ownerRoleLabel } from "../utils/platformLabels";
 
 interface Props {
   result: TenantOnboardingResult;
@@ -15,9 +16,9 @@ export function CredentialsModal({ result, onClose }: Props) {
       `Owner username: ${result.owner_credentials.username}`,
       `Owner temporary password: ${result.owner_credentials.temporary_password}`,
     ];
-    staff.forEach((s, i) => {
-      lines.push(`Staff ${i + 1} username: ${s.username}`);
-      lines.push(`Staff ${i + 1} password: ${s.temporary_password}`);
+    staff.forEach((s) => {
+      lines.push(`${ownerRoleLabel(s.role)} username: ${s.username}`);
+      lines.push(`${ownerRoleLabel(s.role)} password: ${s.temporary_password}`);
     });
     lines.push(`(Passwords shown once — share securely.)`);
     await navigator.clipboard.writeText(lines.join("\n"));
@@ -40,7 +41,7 @@ export function CredentialsModal({ result, onClose }: Props) {
             </dd>
           </div>
           <div>
-            <dt>Owner username</dt>
+            <dt>{ownerRoleLabel(result.owner_credentials.role)} username</dt>
             <dd>
               <code>{result.owner_credentials.username}</code>
             </dd>
@@ -51,9 +52,9 @@ export function CredentialsModal({ result, onClose }: Props) {
               <code className="cred-password">{result.owner_credentials.temporary_password}</code>
             </dd>
           </div>
-          {staff.map((s, idx) => (
+          {staff.map((s) => (
             <div key={s.username} className="cred-list__staff-block">
-              <dt>Staff login {idx + 1}</dt>
+              <dt>{ownerRoleLabel(s.role)} username</dt>
               <dd>
                 <code>{s.username}</code> / <code className="cred-password">{s.temporary_password}</code>
               </dd>

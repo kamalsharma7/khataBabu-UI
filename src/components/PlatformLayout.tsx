@@ -37,6 +37,15 @@ export function PlatformLayout() {
             <NavLink to="/platform/employees" className="platform-nav__link">
               Sales team
             </NavLink>
+            <NavLink to="/platform/expenditure" className="platform-nav__link">
+              Business expenditure
+            </NavLink>
+            <NavLink to="/platform/territory" className="platform-nav__link">
+              Territory
+            </NavLink>
+            <NavLink to="/platform/collections" className="platform-nav__link">
+              Collections
+            </NavLink>
           </nav>
           <p className="platform-sidebar__note">
             Internal use only. Owner and staff apps do not include this console.

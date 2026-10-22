@@ -16,6 +16,7 @@ import {
   type AddonRow,
   type VariationRow,
 } from "../../components/owner/menu/MenuModifierFields";
+import { dietFromSelect, dietSelectValue } from "../../components/owner/menu/menuFoodType";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
 import { downloadMenuExcel } from "../../utils/exportMenuExcel";
 import type {
@@ -29,9 +30,17 @@ const emptyVariation = (defaultSize = false): VariationRow => ({
   name: "",
   price: "",
   is_default: defaultSize,
+  is_available: true,
   weight_grams: "",
+  food_type: "",
 });
-const emptyAddon = (): AddonRow => ({ name: "", price: "", weight_grams: "" });
+const emptyAddon = (): AddonRow => ({
+  name: "",
+  price: "",
+  is_available: true,
+  weight_grams: "",
+  food_type: "",
+});
 
 function parseWeightGrams(raw: string): number | null {
   const n = parseInt(raw.trim(), 10);
@@ -40,23 +49,41 @@ function parseWeightGrams(raw: string): number | null {
 
 function rowsToVariations(rows: VariationRow[]): MenuVariationInput[] {
   const filled = rows.filter((r) => r.name.trim());
+  const defaultCount = filled.filter((r) => r.is_default).length;
+  if (filled.length > 0 && defaultCount > 1) {
+    throw new Error("Only one variation can be default");
+  }
+  if (filled.length > 0 && defaultCount === 0) {
+    filled[0] = { ...filled[0], is_default: true };
+  }
+  const names = filled.map((r) => r.name.trim().toLowerCase());
+  if (new Set(names).size !== names.length) {
+    throw new Error("Variation names must be unique");
+  }
   return filled.map((r, i) => ({
     name: r.name.trim(),
     price: parseFloat(r.price) || 0,
     sort_order: i,
     is_default: r.is_default,
+    is_available: r.is_available,
     weight_grams: parseWeightGrams(r.weight_grams),
+    food_type: dietFromSelect(r.food_type),
   }));
 }
 
 function rowsToAddons(rows: AddonRow[]): MenuAddonInput[] {
   const filled = rows.filter((r) => r.name.trim());
+  const names = filled.map((r) => r.name.trim().toLowerCase());
+  if (new Set(names).size !== names.length) {
+    throw new Error("Topping names must be unique");
+  }
   return filled.map((r, i) => ({
     name: r.name.trim(),
     price: parseFloat(r.price) || 0,
     sort_order: i,
-    is_available: true,
+    is_available: r.is_available,
     weight_grams: parseWeightGrams(r.weight_grams),
+    food_type: dietFromSelect(r.food_type),
   }));
 }
 
@@ -66,7 +93,9 @@ function itemToVariationRows(item: MenuItem): VariationRow[] {
     name: v.name,
     price: String(v.price),
     is_default: v.is_default,
+    is_available: v.is_available ?? true,
     weight_grams: v.weight_grams != null ? String(v.weight_grams) : "",
+    food_type: dietSelectValue(v.food_type),
   }));
 }
 
@@ -75,7 +104,9 @@ function itemToAddonRows(item: MenuItem): AddonRow[] {
   return item.addons.map((a) => ({
     name: a.name,
     price: String(a.price),
+    is_available: a.is_available !== false,
     weight_grams: a.weight_grams != null ? String(a.weight_grams) : "",
+    food_type: dietSelectValue(a.food_type),
   }));
 }
 
@@ -177,13 +208,13 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
   const addItem = async (e: FormEvent) => {
     e.preventDefault();
     if (!outlet) return;
-    const variations = rowsToVariations(newVariations);
-    const addons = rowsToAddons(newAddons);
-    const basePrice =
-      variations.length > 0
-        ? variations.find((v) => v.is_default)?.price ?? variations[0].price
-        : parseFloat(itemForm.price);
     try {
+      const variations = rowsToVariations(newVariations);
+      const addons = rowsToAddons(newAddons);
+      const basePrice =
+        variations.length > 0
+          ? variations.find((v) => v.is_default)?.price ?? variations[0].price
+          : parseFloat(itemForm.price);
       await createMenuItem(outlet.id, {
         category_id: itemForm.category_id,
         name: itemForm.name.trim(),
@@ -202,7 +233,7 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
       setNewAddons([emptyAddon()]);
       await load();
     } catch (err) {
-      alert(err instanceof OwnerApiError ? err.message : "Failed");
+      alert(err instanceof Error ? err.message : err instanceof OwnerApiError ? err.message : "Failed");
     }
   };
 
@@ -296,7 +327,7 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
       setEditItem(null);
       await load();
     } catch (err) {
-      alert(err instanceof OwnerApiError ? err.message : "Failed");
+      alert(err instanceof Error ? err.message : err instanceof OwnerApiError ? err.message : "Failed");
     }
   };
 

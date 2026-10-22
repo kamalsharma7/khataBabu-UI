@@ -1,6 +1,5 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PosOrder } from "../../../types/owner";
-import { fmt } from "./posUtils";
 import {
   formatSessionClock,
   formatSessionClockEnd,
@@ -14,75 +13,141 @@ export type TimeSessionApplyPayload = {
   time_session_start?: string;
   time_session_end?: string;
   clear_time_session?: boolean;
+  time_billing_excluded?: boolean;
 };
 
 type Props = {
   order: PosOrder;
-  hourlyRate: string | null;
   busy: boolean;
+  canManageTimeBilling: boolean;
   onApply: (patch: TimeSessionApplyPayload) => void;
-  onCancelOrder: () => void;
 };
 
 function ClockPicker({
   value,
   disabled,
+  isOpen,
+  onOpenChange,
   onPick,
   ariaLabel,
 }: {
   value: string;
   disabled: boolean;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
   onPick: (time: string) => void;
   ariaLabel: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (isOpen) setDraft(value);
+  }, [isOpen, value]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) onOpenChange(false);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [isOpen, onOpenChange]);
+
+  const toggle = () => {
+    if (disabled) return;
+    onOpenChange(!isOpen);
+  };
+
   return (
-    <label className="pp-time-clock-picker" title="Set time manually">
-      <span className="pp-time-clock-picker__icon" aria-hidden>🕐</span>
-      <input
-        ref={inputRef}
-        type="time"
-        className="pp-time-clock-picker__input"
-        value={value}
+    <div ref={rootRef} className={`pp-time-clock-picker ${isOpen ? "pp-time-clock-picker--open" : ""}`}>
+      <button
+        type="button"
+        className={`pp-time-clock-picker__trigger ${isOpen ? "pp-time-clock-picker__trigger--on" : ""}`}
         disabled={disabled}
+        title={isOpen ? "Close time picker" : "Set time"}
         aria-label={ariaLabel}
-        onChange={(e) => onPick(e.target.value)}
-      />
-    </label>
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggle();
+        }}
+      >
+        <span className="pp-time-clock-picker__icon" aria-hidden>🕐</span>
+      </button>
+      {isOpen && (
+        <div className="pp-time-clock-picker__popover" role="dialog" aria-label={ariaLabel}>
+          <input
+            type="time"
+            className="pp-time-clock-picker__time-input"
+            value={draft}
+            disabled={disabled}
+            autoFocus
+            onChange={(e) => {
+              const next = e.target.value;
+              setDraft(next);
+              if (next) onPick(next);
+            }}
+          />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenChange(false)}>
+            Close
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
-export function PosTimeSessionEditor({ order, hourlyRate, busy, onApply, onCancelOrder }: Props) {
-  const timeCharge = parseFloat(order.time_charge ?? "0") || 0;
+export function PosTimeSessionEditor({
+  order,
+  busy,
+  canManageTimeBilling,
+  onApply,
+}: Props) {
+  const [openClock, setOpenClock] = useState<"start" | "end" | null>(null);
   const startSet = order.time_session_start != null;
 
   const onPickStart = (time: string) => {
     const iso = localTimeToIso(time, null);
-    if (iso) onApply({ time_session_start: iso });
+    if (!iso) return;
+    if (order.time_session_end) {
+      onApply({ time_session_start: iso, time_session_end: order.time_session_end });
+    } else {
+      onApply({ time_session_start: iso });
+    }
   };
 
   const onPickEnd = (time: string) => {
-    if (!order.time_session_start) {
-      window.alert("Tap Start first, then set end time.");
-      return;
-    }
+    if (!order.time_session_start) return;
     const iso = localTimeToIso(time, order.time_session_start);
     if (iso) onApply({ time_session_end: iso });
   };
 
-  return (
-    <section className="pp-time-editor card pp-time-editor--simple">
-      <div className="pp-time-editor__head">
-        <div>
-          <h2 className="pp-time-editor__title">Table time</h2>
-          {hourlyRate && <p className="muted">₹{hourlyRate} / hour</p>}
-        </div>
-        {timeCharge > 0 && <span className="pp-time-editor__charge">{fmt(timeCharge)}</span>}
-      </div>
+  const setOpen = (which: "start" | "end" | null) => setOpenClock(which);
 
+  if (order.time_billing_excluded) {
+    if (!canManageTimeBilling) return null;
+    return (
+      <section className="pp-time-editor pp-time-editor--minimal" aria-label="Table time">
+        <p className="pp-time-editor__excluded-note">Food items only — table time not charged on this bill.</p>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={busy}
+          onClick={() => onApply({ time_billing_excluded: false })}
+        >
+          Charge table time on this bill
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="pp-time-editor pp-time-editor--minimal" aria-label="Table time">
       <div className="pp-time-simple">
         <div className="pp-time-simple-row">
-          <span className="pp-time-simple-row__label">Start</span>
+          <span className="pp-time-simple-row__label">Time start</span>
           <button
             type="button"
             className="pp-time-simple-row__btn"
@@ -94,13 +159,15 @@ export function PosTimeSessionEditor({ order, hourlyRate, busy, onApply, onCance
           <ClockPicker
             value={toTimeInputValue(order.time_session_start)}
             disabled={busy}
+            isOpen={openClock === "start"}
+            onOpenChange={(open) => setOpen(open ? "start" : null)}
             ariaLabel="Set start time"
             onPick={onPickStart}
           />
         </div>
 
         <div className="pp-time-simple-row">
-          <span className="pp-time-simple-row__label">End</span>
+          <span className="pp-time-simple-row__label">Time end</span>
           <button
             type="button"
             className="pp-time-simple-row__btn"
@@ -112,17 +179,15 @@ export function PosTimeSessionEditor({ order, hourlyRate, busy, onApply, onCance
           <ClockPicker
             value={toTimeInputValue(order.time_session_end)}
             disabled={busy || !startSet}
+            isOpen={openClock === "end"}
+            onOpenChange={(open) => setOpen(open ? "end" : null)}
             ariaLabel="Set end time"
             onPick={onPickEnd}
           />
         </div>
       </div>
 
-      <p className="muted pp-time-simple-hint">
-        Tap <strong>Start</strong> when the customer begins, <strong>End</strong> when they leave. Use 🕐 to type a time instead.
-      </p>
-
-      <div className="pp-time-editor__actions">
+      <div className="pp-time-editor__actions pp-time-editor__actions--minimal">
         <button
           type="button"
           className="btn btn-secondary"
@@ -131,15 +196,27 @@ export function PosTimeSessionEditor({ order, hourlyRate, busy, onApply, onCance
         >
           Clear time
         </button>
+      </div>
+
+      {canManageTimeBilling && (
         <button
           type="button"
-          className="btn btn-secondary pp-time-editor__cancel-order"
+          className="pp-time-editor__food-only"
           disabled={busy}
-          onClick={onCancelOrder}
+          onClick={() => {
+            if (
+              !window.confirm(
+                "Skip table time for this bill? Only food and menu items will be charged.",
+              )
+            ) {
+              return;
+            }
+            onApply({ time_billing_excluded: true });
+          }}
         >
-          Cancel order
+          Bill food only (no table time)
         </button>
-      </div>
+      )}
     </section>
   );
 }

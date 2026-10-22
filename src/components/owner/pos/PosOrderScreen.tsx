@@ -11,6 +11,7 @@ import type {
 } from "../../../types/owner";
 import { PosCartSidePanel, type CartPanel } from "./PosCartSidePanel";
 import { PosTimeSessionEditor, type TimeSessionApplyPayload } from "./PosTimeSessionEditor";
+import { itemBaseFoodType } from "../menu/menuFoodType";
 import { dietStripeClass, fmt } from "./posUtils";
 
 const ALL_CAT = "__all__";
@@ -49,7 +50,7 @@ type Props = {
     notes?: string | null;
   }) => void;
   isTimeBased?: boolean;
-  tableHourlyRate?: string | null;
+  canManageTimeBilling?: boolean;
   onTimeSessionApply?: (patch: TimeSessionApplyPayload) => void;
   onCancelOrder?: () => void;
 };
@@ -81,7 +82,7 @@ export function PosOrderScreen({
   gstHint,
   onSaveOrderDetails,
   isTimeBased = false,
-  tableHourlyRate = null,
+  canManageTimeBilling = false,
   onTimeSessionApply,
   onCancelOrder,
 }: Props) {
@@ -99,7 +100,8 @@ export function PosOrderScreen({
   }, [order.lines.length]);
 
   const activeLines = order.lines.filter((l) => l.status !== "cancelled");
-  const timeCharge = parseFloat(order.time_charge ?? "0") || 0;
+  const timeCharge =
+    order.time_billing_excluded ? 0 : parseFloat(order.time_charge ?? "0") || 0;
   const hasBillable = activeLines.length > 0 || (isTimeBased && timeCharge > 0);
   const canKot = order.lines.some(
     (l) => l.status === "pending_kot" && !String(l.id).startsWith("opt-"),
@@ -184,13 +186,12 @@ export function PosOrderScreen({
         )}
       </header>
 
-      {isTimeBased && onTimeSessionApply && onCancelOrder && (
+      {isTimeBased && onTimeSessionApply && (
         <PosTimeSessionEditor
           order={order}
-          hourlyRate={tableHourlyRate}
           busy={busy}
+          canManageTimeBilling={canManageTimeBilling}
           onApply={onTimeSessionApply}
-          onCancelOrder={onCancelOrder}
         />
       )}
 
@@ -240,7 +241,7 @@ export function PosOrderScreen({
                 <button
                   key={item.id}
                   type="button"
-                  className={`pp-item-tile ${dietStripeClass(item.food_type ?? (item.is_veg ? "veg" : "non_veg"))}`}
+                  className={`pp-item-tile ${dietStripeClass(itemBaseFoodType(item))}`}
                   onClick={() => onItemClick(item)}
                   disabled={busy}
                 >

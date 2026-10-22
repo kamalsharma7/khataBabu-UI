@@ -8,9 +8,13 @@ export function OwnerLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isPos = location.pathname.startsWith("/app/pos");
-  const canOverview = profile?.permissions?.includes("analytics.overview") ?? true;
-  const canMenu = profile?.permissions?.includes("pos.menu") ?? true;
-  const canFloor = profile?.permissions?.includes("pos.floor") ?? true;
+  const perms = profile?.permissions ?? [];
+  const canOverview = perms.includes("analytics.overview");
+  const canMenu = perms.includes("pos.menu");
+  const canInventory = perms.includes("pos.inventory");
+  const canFloor = perms.includes("pos.floor");
+  const canSettings = perms.includes("settings.view") || perms.includes("settings.all");
+  const canAudit = perms.includes("audit.view");
 
   const handleLogout = () => {
     logout();
@@ -55,6 +59,9 @@ export function OwnerLayout() {
               Support {profile.support_contact_mobile}
             </a>
           )}
+          {profile?.role && (
+            <span className="owner-role-chip" title="Access level">{profile.role}</span>
+          )}
           <span className="platform-header__user">{profile?.full_name}</span>
           {!profile?.must_change_password && (
             <Link to="/app/change-password" className="btn btn-ghost btn-sm">
@@ -90,6 +97,36 @@ export function OwnerLayout() {
             {canMenu && (
             <NavLink to="/app/menu" className="platform-nav__link">
               Menu
+            </NavLink>
+            )}
+            {canMenu && (
+            <NavLink to="/app/recipes" className="platform-nav__link">
+              Item recipes
+            </NavLink>
+            )}
+            {canInventory && (
+            <NavLink to="/app/raw-materials" className="platform-nav__link">
+              Raw materials
+            </NavLink>
+            )}
+            {canInventory && (
+            <NavLink to="/app/purchases" className="platform-nav__link">
+              Purchases
+            </NavLink>
+            )}
+            {canOverview && (
+            <NavLink to="/app/customers" className="platform-nav__link">
+              Customers (CRM)
+            </NavLink>
+            )}
+            {canSettings && (
+            <NavLink to="/app/settings" className="platform-nav__link">
+              Settings
+            </NavLink>
+            )}
+            {canAudit && (
+            <NavLink to="/app/audit" className="platform-nav__link">
+              Audit log
             </NavLink>
             )}
           </nav>

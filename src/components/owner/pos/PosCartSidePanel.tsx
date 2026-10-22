@@ -7,14 +7,8 @@ import type {
   PosOrderLine,
 } from "../../../types/owner";
 
-const RELATIONS: { value: CustomerRelation; label: string }[] = [
-  { value: "customer", label: "Customer" },
-  { value: "friend", label: "Friend" },
-  { value: "worker", label: "Worker" },
-  { value: "family", label: "Family" },
-  { value: "other", label: "Other" },
-];
 import { dietStripeClass, fmt } from "./posUtils";
+import { PosCustomerPanel } from "./PosCustomerPanel";
 
 export type CartPanel = "order" | "customer" | "comment" | "pay_later" | "payments";
 
@@ -54,96 +48,19 @@ export function PosCartSidePanel({
   onEditOpenLine,
   onSaveOrderDetails,
 }: Props) {
-  const [customerName, setCustomerName] = useState(order.customer_name ?? "");
-  const [customerMobile, setCustomerMobile] = useState(order.customer_mobile ?? "");
-  const [customerLocality, setCustomerLocality] = useState(order.customer_locality ?? "");
-  const [customerRelation, setCustomerRelation] = useState<CustomerRelation | "">(
-    order.customer_relation ?? "",
-  );
   const [notes, setNotes] = useState(order.notes ?? "");
   const [payLater, setPayLater] = useState(order.pay_later ?? false);
 
   useEffect(() => {
-    setCustomerName(order.customer_name ?? "");
-    setCustomerMobile(order.customer_mobile ?? "");
-    setCustomerLocality(order.customer_locality ?? "");
-    setCustomerRelation(order.customer_relation ?? "");
     setNotes(order.notes ?? "");
     setPayLater(order.pay_later ?? false);
-  }, [
-    order.id,
-    order.customer_name,
-    order.customer_mobile,
-    order.customer_locality,
-    order.customer_relation,
-    order.notes,
-    order.pay_later,
-  ]);
+  }, [order.id, order.notes, order.pay_later]);
 
   const formatKotTime = (iso: string) =>
     new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
   if (panel === "customer") {
-    return (
-      <div className="pp-cart-panel">
-        <h3 className="pp-cart-panel__title">Customer</h3>
-        <label className="field">
-          <span>Name</span>
-          <input
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder="Guest name"
-            disabled={busy}
-          />
-        </label>
-        <label className="field">
-          <span>Mobile</span>
-          <input
-            value={customerMobile}
-            onChange={(e) => setCustomerMobile(e.target.value)}
-            placeholder="10-digit mobile"
-            disabled={busy}
-          />
-        </label>
-        <label className="field">
-          <span>Locality</span>
-          <input
-            value={customerLocality}
-            onChange={(e) => setCustomerLocality(e.target.value)}
-            placeholder="Area / landmark (optional)"
-            disabled={busy}
-          />
-        </label>
-        <label className="field">
-          <span>Relation</span>
-          <select
-            value={customerRelation}
-            onChange={(e) => setCustomerRelation(e.target.value as CustomerRelation | "")}
-            disabled={busy}
-          >
-            <option value="">—</option>
-            {RELATIONS.map((r) => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          disabled={busy}
-          onClick={() =>
-            onSaveOrderDetails({
-              customer_name: customerName.trim() || null,
-              customer_mobile: customerMobile.trim() || null,
-              customer_locality: customerLocality.trim() || null,
-              customer_relation: customerRelation || null,
-            })
-          }
-        >
-          Save customer
-        </button>
-      </div>
-    );
+    return <PosCustomerPanel order={order} busy={busy} onSaveOrderDetails={onSaveOrderDetails} />;
   }
 
   if (panel === "comment") {

@@ -63,6 +63,26 @@ export function OwnerDashboardPage() {
               <p className="muted">Categories and items for POS and kitchen.</p>
               <span className="owner-quick-card__cta">Manage menu →</span>
             </Link>
+            <Link to="/app/raw-materials" className="owner-quick-card card">
+              <h2>Raw materials</h2>
+              <p className="muted">Flour, oil, chicken, packaging — opening stock, purchase, wastage.</p>
+              <span className="owner-quick-card__cta">Manage stock →</span>
+            </Link>
+            <Link to="/app/customers" className="owner-quick-card card">
+              <h2>Customers (CRM)</h2>
+              <p className="muted">Who comes, how often, what they like — built from the numbers you save at billing.</p>
+              <span className="owner-quick-card__cta">Open CRM →</span>
+            </Link>
+            <Link to="/app/purchases" className="owner-quick-card card">
+              <h2>Purchases</h2>
+              <p className="muted">Vendor bills, payments due, and invoices — stock in from purchases.</p>
+              <span className="owner-quick-card__cta">View purchases →</span>
+            </Link>
+            <Link to="/app/recipes" className="owner-quick-card card">
+              <h2>Item recipes</h2>
+              <p className="muted">BOM per dish. Linked recipes deduct raw materials on KOT.</p>
+              <span className="owner-quick-card__cta">Manage recipes →</span>
+            </Link>
           </div>
         </>
       )}

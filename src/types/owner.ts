@@ -43,7 +43,9 @@ export interface MenuVariation {
   price: string;
   sort_order: number;
   is_default: boolean;
+  is_available?: boolean;
   weight_grams?: number | null;
+  food_type?: FoodType | null;
 }
 
 export interface MenuAddon {
@@ -51,8 +53,9 @@ export interface MenuAddon {
   name: string;
   price: string;
   sort_order: number;
-  is_available: boolean;
+  is_available?: boolean;
   weight_grams?: number | null;
+  food_type?: FoodType | null;
 }
 
 export type FoodType = "veg" | "non_veg" | "egg";
@@ -83,7 +86,9 @@ export interface MenuVariationInput {
   price: number;
   sort_order?: number;
   is_default?: boolean;
+  is_available?: boolean;
   weight_grams?: number | null;
+  food_type?: FoodType | null;
 }
 
 export interface MenuAddonInput {
@@ -92,6 +97,7 @@ export interface MenuAddonInput {
   sort_order?: number;
   is_available?: boolean;
   weight_grams?: number | null;
+  food_type?: FoodType | null;
 }
 
 export type OrderType = "dine_in" | "takeaway" | "delivery";
@@ -144,6 +150,7 @@ export interface PosOrder {
   customer_mobile: string | null;
   customer_locality: string | null;
   customer_relation: CustomerRelation | null;
+  customer_id?: string | null;
   bill_saved_at: string | null;
   pay_later: boolean;
   notes: string | null;
@@ -154,6 +161,7 @@ export interface PosOrder {
   time_billed_minutes: number | null;
   hourly_rate_snapshot: string | null;
   time_charge: string | null;
+  time_billing_excluded?: boolean;
   lines: PosOrderLine[];
   running_subtotal: string;
   warnings?: string[];
@@ -210,6 +218,65 @@ export interface PosBill {
   balance_due?: string;
   status: "open" | "settled" | "void";
   payments: PosBillPayment[];
+  invoice_number?: number | null;
+  invoice_code?: string | null;
+  refunded_total?: string;
+}
+
+export interface BusinessSettings {
+  legal_name: string;
+  trading_name: string | null;
+  primary_phone: string;
+  primary_email: string;
+  city: string;
+  state: string;
+  gst_registered: boolean;
+  gstin: string | null;
+  fssai: string | null;
+  pan: string | null;
+  registered_address: string | null;
+  invoice_prefix: string;
+  worker_max_discount_percent: string;
+  max_discount_percent: string;
+  manager_pin_configured: boolean;
+}
+
+export interface DiscountPolicy {
+  worker_max_discount_percent: string;
+  max_discount_percent: string;
+  manager_pin_configured: boolean;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  outlet_id: string | null;
+  actor_username: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  summary: string;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface BusinessDayState {
+  id: string;
+  business_date: string;
+  status: string;
+  opening_cash: string;
+  expected_cash: string | null;
+  projected_expected_cash?: string;
+  actual_closing_cash: string | null;
+  cash_variance: string | null;
+  cash_sales_total: string;
+  notes: string | null;
+  movements: {
+    id: string;
+    kind: string;
+    amount: string;
+    reason: string;
+    created_at: string;
+  }[];
 }
 
 export interface SplitBillPreview {
@@ -304,7 +371,14 @@ export interface PosKotLine {
   id: string;
   item_name: string;
   variation_name: string | null;
+  addon_names?: string[];
   quantity: number;
+}
+
+export interface LinkedMenuItem {
+  menu_item_id: string;
+  menu_item_name: string;
+  qty_per_serve: string;
 }
 
 export interface InventoryItem {
@@ -312,19 +386,411 @@ export interface InventoryItem {
   outlet_id: string;
   name: string;
   unit: string;
+  category: string;
+  tracks_daily: boolean;
+  daily_par: string | null;
+  stock_date: string | null;
+  today_opening: string | null;
+  remaining_today: string;
+  sold_today: string;
   current_stock: string;
   low_stock_threshold: string | null;
+  cost_per_unit: string | null;
+  notes: string | null;
+  linked_menu_items: LinkedMenuItem[];
 }
 
-export interface InventoryDayBucket {
+export interface InventoryTransaction {
+  id: string;
+  inventory_item_id: string;
+  delta: string;
+  reason: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export type InventoryKind = "all" | "raw" | "daily";
+
+// ---- CRM / customers ----
+
+export type CustomerSegment =
+  | "new"
+  | "occasional"
+  | "regular"
+  | "vip"
+  | "at_risk"
+  | "lost"
+  | "prospect";
+
+export interface CustomerSummary {
+  id: string;
+  outlet_id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  locality: string | null;
+  relation: CustomerRelation | null;
+  tags: string[];
+  birthday: string | null;
+  anniversary: string | null;
+  marketing_opt_in: boolean;
+  source: string;
+  visit_count: number;
+  total_spend_inr: string;
+  avg_ticket_inr: string;
+  first_visit_at: string | null;
+  last_visit_at: string | null;
+  days_since_last_visit: number | null;
+  segment: CustomerSegment;
+  khata_due_inr: string;
+  created_at: string;
+}
+
+export interface CustomerFavouriteItem {
+  item_name: string;
+  times_ordered: number;
+  total_qty: number;
+  menu_item_id: string | null;
+}
+
+export interface CustomerVisit {
+  order_id: string;
+  order_number: number;
+  bill_id: string | null;
+  bill_number: number | null;
+  invoice_code: string | null;
+  order_type: OrderType;
+  table_label: string | null;
+  settled_at: string | null;
+  grand_total: string;
+  items_summary: string;
+  payment_methods: PaymentMethod[];
+  guest_count: number | null;
+}
+
+export interface WeekdayCount {
+  weekday: number;
   label: string;
-  total_qty: string;
+  visits: number;
 }
 
-export interface InventoryAnalytics {
-  items: InventoryItem[];
-  usage_by_weekday: InventoryDayBucket[];
-  usage_by_month: InventoryDayBucket[];
+export interface DaypartCount {
+  key: string;
+  label: string;
+  visits: number;
+}
+
+export interface PaymentMixEntry {
+  method: PaymentMethod;
+  amount_inr: string;
+  share_percent: string;
+}
+
+export interface CustomerDetail extends CustomerSummary {
+  address: string | null;
+  notes: string | null;
+  preferred_order_type: OrderType | null;
+  veg_share_percent: string | null;
+  avg_guest_count: string | null;
+  favourite_items: CustomerFavouriteItem[];
+  visits_by_weekday: WeekdayCount[];
+  visits_by_daypart: DaypartCount[];
+  payment_mix: PaymentMixEntry[];
+  recent_visits: CustomerVisit[];
+  avg_days_between_visits: string | null;
+}
+
+export interface CustomerListResponse {
+  total: number;
+  customers: CustomerSummary[];
+}
+
+export interface CustomerLookupResponse {
+  found: boolean;
+  customer: CustomerSummary | null;
+  favourite_items: string[];
+  greeting: string | null;
+}
+
+export interface CustomerWrite {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  locality?: string | null;
+  address?: string | null;
+  birthday?: string | null;
+  anniversary?: string | null;
+  relation?: CustomerRelation | null;
+  tags?: string[];
+  notes?: string | null;
+  marketing_opt_in?: boolean;
+  clear_birthday?: boolean;
+  clear_anniversary?: boolean;
+}
+
+export interface SegmentCount {
+  segment: CustomerSegment;
+  label: string;
+  customers: number;
+  spend_inr: string;
+}
+
+export interface LocalityInsight {
+  locality: string;
+  customers: number;
+  visits: number;
+  spend_inr: string;
+}
+
+export interface FrequencyBucket {
+  bucket: string;
+  customers: number;
+}
+
+export interface MonthlyNewCustomers {
+  month: string;
+  label: string;
+  customers: number;
+}
+
+export interface TrendingItem {
+  item_name: string;
+  customers: number;
+  total_qty: number;
+}
+
+export interface OccasionEntry {
+  customer_id: string;
+  name: string | null;
+  phone: string | null;
+  occasion: "birthday" | "anniversary";
+  on_date: string;
+  days_away: number;
+}
+
+export interface OrderTypeMix {
+  order_type: OrderType;
+  visits: number;
+  share_percent: string;
+}
+
+export interface CrmInsights {
+  total_customers: number;
+  with_phone: number;
+  new_this_month: number;
+  new_last_month: number;
+  repeat_customers: number;
+  repeat_rate_percent: string;
+  avg_visits_per_customer: string;
+  avg_spend_per_customer_inr: string;
+  identified_orders_30d: number;
+  settled_orders_30d: number;
+  capture_rate_30d_percent: string;
+  khata_due_total_inr: string;
+  segments: SegmentCount[];
+  top_localities: LocalityInsight[];
+  top_spenders: CustomerSummary[];
+  most_frequent: CustomerSummary[];
+  win_back: CustomerSummary[];
+  frequency_buckets: FrequencyBucket[];
+  monthly_new: MonthlyNewCustomers[];
+  trending_items: TrendingItem[];
+  upcoming_occasions: OccasionEntry[];
+  order_type_mix: OrderTypeMix[];
+  visits_by_weekday: WeekdayCount[];
+  visits_by_daypart: DaypartCount[];
+}
+
+export interface CustomerBackfillResult {
+  orders_scanned: number;
+  orders_linked: number;
+  customers_created: number;
+  customers_refreshed: number;
+}
+
+export type PurchasePaymentMode = "cash" | "upi" | "card" | "bank" | "credit" | "other";
+export type PurchasePaymentStatus = "unpaid" | "partial" | "paid";
+
+export interface PurchaseLineInput {
+  inventory_item_id?: string | null;
+  item_name: string;
+  quantity: number;
+  unit: string;
+  unit_price_inr: number;
+  tax_percent: number;
+}
+
+export interface PurchaseInvoiceCreate {
+  vendor_name: string;
+  vendor_phone?: string | null;
+  vendor_gstin?: string | null;
+  invoice_number?: string | null;
+  invoice_date: string;
+  po_reference?: string | null;
+  discount_inr?: number;
+  other_charges_inr?: number;
+  paid_inr?: number;
+  payment_mode?: PurchasePaymentMode | null;
+  notes?: string | null;
+  apply_stock?: boolean;
+  lines: PurchaseLineInput[];
+}
+
+export interface PurchaseLine {
+  id: string;
+  inventory_item_id: string | null;
+  item_name: string;
+  quantity: string;
+  unit: string;
+  unit_price_inr: string;
+  tax_percent: string;
+  line_total_inr: string;
+}
+
+export interface PurchasePayment {
+  id: string;
+  amount_inr: string;
+  payment_mode: string;
+  paid_on: string;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface PurchaseInvoiceSummary {
+  id: string;
+  vendor_name: string;
+  invoice_number: string | null;
+  invoice_date: string;
+  po_reference: string | null;
+  total_inr: string;
+  paid_inr: string;
+  balance_inr: string;
+  tax_inr: string;
+  payment_status: PurchasePaymentStatus;
+  status: string;
+  stock_applied: boolean;
+  line_count: number;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {
+  outlet_id: string;
+  vendor_phone: string | null;
+  vendor_gstin: string | null;
+  subtotal_inr: string;
+  discount_inr: string;
+  other_charges_inr: string;
+  payment_mode: string | null;
+  notes: string | null;
+  lines: PurchaseLine[];
+  payments: PurchasePayment[];
+}
+
+export interface PurchaseListTotals {
+  invoice_count: number;
+  total_inr: string;
+  paid_inr: string;
+  outstanding_inr: string;
+  tax_inr: string;
+}
+
+export interface PurchaseListResponse {
+  from_date: string | null;
+  to_date: string | null;
+  totals: PurchaseListTotals;
+  vendors: string[];
+  invoices: PurchaseInvoiceSummary[];
+}
+
+export type StockAdjustReason = "purchase" | "wastage" | "opening" | "adjustment";
+
+export interface ItemQtyRow {
+  menu_item_id: string | null;
+  item_name: string;
+  quantity: string;
+}
+
+export interface SalesByDateRow {
+  date: string;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesByWeekdayRow {
+  weekday: string;
+  is_weekend: boolean;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesByMonthRow {
+  month: string;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesByYearRow {
+  year: string;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesByWeekRow {
+  week: string;
+  week_start: string;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesByQuarterRow {
+  quarter: string;
+  year: number;
+  quarter_num: number;
+  total_quantity: string;
+  items: ItemQtyRow[];
+}
+
+export interface SalesWeekendSplit {
+  weekday_total: string;
+  weekend_total: string;
+  weekday_items: ItemQtyRow[];
+  weekend_items: ItemQtyRow[];
+}
+
+export interface SalesOverview {
+  menu_items_in_catalog: number;
+  open_item_names: number;
+  order_lines_counted: number;
+  active_sale_days: number;
+  total_units_sold: string;
+  weekday_units: string;
+  weekend_units: string;
+}
+
+export interface ItemSalesSummaryRow {
+  menu_item_id: string | null;
+  item_name: string;
+  total_quantity: string;
+  by_weekday: ItemQtyRow[];
+  weekend_quantity: string;
+  weekday_quantity: string;
+}
+
+export interface InventorySalesAnalytics {
+  from_date: string;
+  to_date: string;
+  overview: SalesOverview;
+  by_day: SalesByDateRow[];
+  by_weekday: SalesByWeekdayRow[];
+  by_week: SalesByWeekRow[];
+  by_month: SalesByMonthRow[];
+  by_quarter: SalesByQuarterRow[];
+  by_year: SalesByYearRow[];
+  weekend_split: SalesWeekendSplit;
+  by_item: ItemSalesSummaryRow[];
+  top_items: ItemSalesSummaryRow[];
 }
 
 export interface PosKot {

@@ -1,4 +1,4 @@
-import type { PaymentMethod, PosBill } from "../../../types/owner";
+import type { DiscountPolicy, PaymentMethod, PosBill } from "../../../types/owner";
 import { fmt, money } from "./posUtils";
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -29,6 +29,9 @@ type Props = {
   onPaymentsChange: (rows: PaymentRow[]) => void;
   onClose: () => void;
   onComplete: () => void;
+  discountPolicy: DiscountPolicy | null;
+  managerPin: string;
+  onManagerPin: (v: string) => void;
 };
 
 export function PosSettleModal({
@@ -49,7 +52,14 @@ export function PosSettleModal({
   onPaymentsChange,
   onClose,
   onComplete,
+  discountPolicy,
+  managerPin,
+  onManagerPin,
 }: Props) {
+  const discPct = parseFloat(discountPercent) || 0;
+  const workerCap = discountPolicy ? parseFloat(discountPolicy.worker_max_discount_percent) : 100;
+  const needsPin = discountPolicy && discPct > workerCap && discountPolicy.manager_pin_configured;
+
   const paymentTotal = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
   const billDue = money(bill.balance_due ?? bill.grand_total);
   const paidOk = money(paymentTotal) === billDue;
@@ -116,6 +126,17 @@ export function PosSettleModal({
               </label>
             </div>
             {gstHint && <p className="pos-settle-gst-hint">{gstHint}</p>}
+            {needsPin && (
+              <label className="field pos-settle-manager-pin">
+                <span>Manager PIN (discount above {workerCap}%)</span>
+                <input
+                  type="password"
+                  value={managerPin}
+                  onChange={(e) => onManagerPin(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            )}
           </section>
 
           <section className="pos-settle-block pos-settle-summary">

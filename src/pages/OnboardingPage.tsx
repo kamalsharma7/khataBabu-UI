@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { createTenant, listSalesEmployees } from "../api/platform";
 import { CredentialsModal } from "../components/CredentialsModal";
@@ -11,6 +12,9 @@ import type {
   TenantOnboardingResult,
   VenueKind,
 } from "../types/platform";
+import { StateCitySelect } from "../components/platform/StateCitySelect";
+import { DEFAULT_INDIAN_STATE, defaultCityForState } from "../data/indiaTerritory";
+import { labelFor, EMPLOYMENT_STATUS_OPTIONS } from "../utils/platformLabels";
 
 const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [
   { value: "restaurant", label: "Restaurant" },
@@ -43,15 +47,8 @@ const VENUES: { value: VenueKind; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Delhi", "Goa",
-  "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
-  "Uttarakhand", "West Bengal",
-];
-
 export function OnboardingPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -61,8 +58,8 @@ export function OnboardingPage() {
   const [businessType, setBusinessType] = useState<BusinessType>("restaurant");
   const [primaryPhone, setPrimaryPhone] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("Haryana");
+  const [state, setState] = useState(DEFAULT_INDIAN_STATE);
+  const [city, setCity] = useState(() => defaultCityForState(DEFAULT_INDIAN_STATE));
   const [gstRegistered, setGstRegistered] = useState(false);
   const [gstin, setGstin] = useState("");
   const [fssai, setFssai] = useState("");
@@ -85,8 +82,6 @@ export function OnboardingPage() {
   const [roughScale, setRoughScale] = useState("");
   const [salesEmployees, setSalesEmployees] = useState<SalesEmployee[]>([]);
   const [assignedSalesId, setAssignedSalesId] = useState("");
-  const [adminSeats, setAdminSeats] = useState("0");
-  const [workerSeats, setWorkerSeats] = useState("0");
 
   useEffect(() => {
     void listSalesEmployees(true)
@@ -138,10 +133,6 @@ export function OnboardingPage() {
       rough_scale_notes: roughScale.trim() || null,
     },
     assigned_sales_employee_id: assignedSalesId || null,
-    staff: {
-      admin_seats: Math.min(5, Math.max(0, parseInt(adminSeats, 10) || 0)),
-      worker_seats: Math.min(20, Math.max(0, parseInt(workerSeats, 10) || 0)),
-    },
   });
 
   const validateStep = (s: number): string | null => {
@@ -149,7 +140,7 @@ export function OnboardingPage() {
       if (!legalName.trim()) return "Business name is required";
       if (!primaryPhone.trim()) return "Business phone is required";
       if (!primaryEmail.trim()) return "Business email is required";
-      if (!city.trim()) return "City is required";
+      if (!city.trim() || !state.trim()) return "Select state and city";
       if (gstRegistered && gstin.trim().length !== 15) return "GSTIN must be 15 characters";
     }
     if (s === 2) {
@@ -246,18 +237,12 @@ export function OnboardingPage() {
               <span>Primary email</span>
               <input type="email" value={primaryEmail} onChange={(e) => setPrimaryEmail(e.target.value)} />
             </label>
-            <label className="field">
-              <span>City</span>
-              <input value={city} onChange={(e) => setCity(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>State</span>
-              <select value={state} onChange={(e) => setState(e.target.value)}>
-                {INDIAN_STATES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </label>
+            <StateCitySelect
+              state={state}
+              city={city}
+              onStateChange={setState}
+              onCityChange={setCity}
+            />
             <label className="field field--checkbox field--full">
               <input type="checkbox" checked={gstRegistered} onChange={(e) => setGstRegistered(e.target.checked)} />
               <span>GST registered</span>
@@ -372,7 +357,7 @@ export function OnboardingPage() {
                 <option value="">— Not assigned —</option>
                 {salesEmployees.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.full_name} ({e.employee_code}) · {e.mobile}
+                    {e.full_name} ({e.employee_code}) · {labelFor(EMPLOYMENT_STATUS_OPTIONS, e.employment_status)}
                   </option>
                 ))}
               </select>
@@ -380,29 +365,19 @@ export function OnboardingPage() {
                 <span className="field-hint">Add employees under Platform → Sales team first.</span>
               )}
             </label>
-            <label className="field">
-              <span>Extra admin logins (overview + menu)</span>
-              <input
-                type="number"
-                min={0}
-                max={5}
-                value={adminSeats}
-                onChange={(e) => setAdminSeats(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Worker / billing-only logins</span>
-              <input
-                type="number"
-                min={0}
-                max={20}
-                value={workerSeats}
-                onChange={(e) => setWorkerSeats(e.target.value)}
-              />
-            </label>
-            <p className="field-hint field--full">
-              Owner login is always created. Admin and worker credentials are shown once after submit (like the owner password).
-            </p>
+            <div className="cred-auto-card field--full">
+              <h3>Logins created automatically</h3>
+              <ul>
+                <li>
+                  <strong>Owner (admin)</strong> — full access; details from step 2. Username &amp; password
+                  shown once after submit.
+                </li>
+                <li>
+                  <strong>Receptionist (employee)</strong> — POS billing only; one extra login generated
+                  automatically. Role is stored at sign-in for menu restrictions.
+                </li>
+              </ul>
+            </div>
           </div>
         )}
 
@@ -433,6 +408,7 @@ export function OnboardingPage() {
           onClose={() => {
             setResult(null);
             setStep(1);
+            navigate("/platform/tenants", { replace: true });
           }}
         />
       )}

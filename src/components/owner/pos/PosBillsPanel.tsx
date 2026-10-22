@@ -9,6 +9,7 @@ type Props = {
   outletId: string;
   bills: PosBillListEntry[];
   loading: boolean;
+  canRefund?: boolean;
   onRefresh: () => void;
 };
 
@@ -27,7 +28,7 @@ function billTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
-export function PosBillsPanel({ outletId, bills, loading, onRefresh }: Props) {
+export function PosBillsPanel({ outletId, bills, loading, canRefund = false, onRefresh }: Props) {
   const [detail, setDetail] = useState<PosBillDetail | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -101,7 +102,15 @@ export function PosBillsPanel({ outletId, bills, loading, onRefresh }: Props) {
         </section>
       ))}
 
-      {detail && <PosBillDetailModal detail={detail} onClose={() => setDetail(null)} />}
+      {detail && (
+        <PosBillDetailModal
+          detail={detail}
+          outletId={outletId}
+          canRefund={canRefund}
+          onClose={() => setDetail(null)}
+          onRefunded={onRefresh}
+        />
+      )}
     </div>
   );
 }

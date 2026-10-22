@@ -3,6 +3,8 @@ const API_BASE =
   (import.meta.env.DEV ? "/api/v1" : "http://localhost:8000/api/v1");
 
 const TOKEN_KEY = "khatababu_owner_token";
+const ROLE_KEY = "khatababu_owner_role";
+const PERMS_KEY = "khatababu_owner_permissions";
 
 export function getOwnerToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -13,8 +15,42 @@ export function setOwnerToken(token: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+/** Role for UI gating (owner | admin | employee). Cleared on logout. */
+export function getOwnerRole(): string | null {
+  return sessionStorage.getItem(ROLE_KEY);
+}
+
+export function setOwnerRole(role: string | null): void {
+  if (role) sessionStorage.setItem(ROLE_KEY, role);
+  else sessionStorage.removeItem(ROLE_KEY);
+}
+
+export function getOwnerPermissions(): string[] {
+  const raw = sessionStorage.getItem(PERMS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as string[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setOwnerPermissions(perms: string[] | null): void {
+  if (perms && perms.length) sessionStorage.setItem(PERMS_KEY, JSON.stringify(perms));
+  else sessionStorage.removeItem(PERMS_KEY);
+}
+
 function formatApiErrorDetail(detail: unknown, fallback: string): string {
   if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in detail) {
+    const msg = (detail as { message: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  if (detail && typeof detail === "object" && "inventory" in detail) {
+    const inv = (detail as { inventory: unknown }).inventory;
+    if (Array.isArray(inv)) return inv.map(String).join(" · ");
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {

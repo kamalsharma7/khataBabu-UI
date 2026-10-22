@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import { ownerLogin, ownerMe, type OwnerProfile } from "../api/owner";
-import { getOwnerToken, setOwnerToken } from "../api/ownerClient";
+import {
+  getOwnerToken,
+  setOwnerPermissions,
+  setOwnerRole,
+  setOwnerToken,
+} from "../api/ownerClient";
 import { normalizeOwnerUsername } from "../utils/ownerUsername";
 
 interface OwnerAuthContextValue {
@@ -32,9 +37,14 @@ export function OwnerAuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        setProfile(await ownerMe());
+        const me = await ownerMe();
+        setProfile(me);
+        setOwnerRole(me.role ?? null);
+        setOwnerPermissions(me.permissions ?? []);
       } catch {
         setOwnerToken(null);
+        setOwnerRole(null);
+        setOwnerPermissions(null);
       } finally {
         setLoading(false);
       }
@@ -46,17 +56,23 @@ export function OwnerAuthProvider({ children }: { children: ReactNode }) {
     setOwnerToken(tokens.access_token);
     const me = await ownerMe();
     setProfile(me);
+    setOwnerRole(me.role ?? null);
+    setOwnerPermissions(me.permissions ?? []);
     return me;
   }, []);
 
   const refreshProfile = useCallback(async () => {
     const me = await ownerMe();
     setProfile(me);
+    setOwnerRole(me.role ?? null);
+    setOwnerPermissions(me.permissions ?? []);
     return me;
   }, []);
 
   const logout = useCallback(() => {
     setOwnerToken(null);
+    setOwnerRole(null);
+    setOwnerPermissions(null);
     setProfile(null);
   }, []);
 

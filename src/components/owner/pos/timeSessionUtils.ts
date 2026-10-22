@@ -15,6 +15,14 @@ export function toTimeInputValue(iso: string | null): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Value for datetime-local inputs in local timezone. */
+export function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** Build ISO timestamp for today (or anchor day) at HH:MM local. */
 export function localTimeToIso(timeHHMM: string, anchorIso: string | null): string | null {
   if (!timeHHMM.trim()) return null;
