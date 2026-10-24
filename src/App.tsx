@@ -6,6 +6,8 @@ import { OwnerProtectedRoute } from "./components/owner/OwnerProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 import { OwnerAuthProvider } from "./context/OwnerAuthContext";
 import { OwnerOutletProvider } from "./context/OwnerOutletContext";
+import { OwnerPermissionsProvider } from "./context/OwnerPermissionsContext";
+import { OwnerStaffPermissionsPage } from "./pages/owner/OwnerStaffPermissionsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PlatformExpenditurePage } from "./pages/PlatformExpenditurePage";
@@ -27,6 +29,7 @@ import { OwnerPurchasesPage } from "./pages/owner/OwnerPurchasesPage";
 import { OwnerCustomersPage } from "./pages/owner/OwnerCustomersPage";
 import { OwnerPosPage } from "./pages/owner/OwnerPosPage";
 import { OwnerSettingsPage } from "./pages/owner/OwnerSettingsPage";
+import { OwnerTaxPage } from "./pages/owner/OwnerTaxPage";
 import { OwnerAuditLogPage } from "./pages/owner/OwnerAuditLogPage";
 
 export default function App() {
@@ -43,7 +46,9 @@ export default function App() {
             <Route
               element={
                 <OwnerOutletProvider>
-                  <OwnerLayout />
+                  <OwnerPermissionsProvider>
+                    <OwnerLayout />
+                  </OwnerPermissionsProvider>
                 </OwnerOutletProvider>
               }
             >
@@ -56,6 +61,8 @@ export default function App() {
               <Route path="/app/raw-materials" element={<OwnerRawMaterialsPage />} />
               <Route path="/app/purchases" element={<OwnerPurchasesPage />} />
               <Route path="/app/customers" element={<OwnerCustomersPage />} />
+              <Route path="/app/staff" element={<OwnerStaffPermissionsPage />} />
+              <Route path="/app/tax" element={<OwnerTaxPage />} />
               <Route path="/app/settings" element={<OwnerSettingsPage />} />
               <Route path="/app/audit" element={<OwnerAuditLogPage />} />
             </Route>

@@ -9,7 +9,7 @@ type ToolItem = {
   section?: PosBillingSection;
   drawer?: PosToolDrawerId;
   icon: string;
-  show: boolean;
+  perm?: string;
 };
 
 type Props = {
@@ -19,6 +19,7 @@ type Props = {
   permissions: string[];
   onSection: (section: PosBillingSection) => void;
   onDrawer: (id: PosToolDrawerId | null) => void;
+  onDenied?: () => void;
 };
 
 export function PosTopToolbar({
@@ -28,69 +29,25 @@ export function PosTopToolbar({
   permissions,
   onSection,
   onDrawer,
+  onDenied,
 }: Props) {
   const p = (code: string) => permissions.includes(code);
 
   const items: ToolItem[] = [
-    {
-      id: "tables",
-      label: "Tables",
-      title: "Table floor & new orders",
-      section: "tables",
-      icon: "▦",
-      show: true,
-    },
-    {
-      id: "menu",
-      label: "Menu",
-      title: "Menu catalog view",
-      section: "menu",
-      icon: "📖",
-      show: p("pos.menu"),
-    },
-    {
-      id: "bills",
-      label: "Bills",
-      title: "Settled bills & invoices",
-      section: "bills",
-      icon: "🧾",
-      show: p("pos.bills"),
-    },
-    {
-      id: "stock",
-      label: "Stock",
-      title: "Inventory & sales analytics",
-      section: "inventory",
-      icon: "📦",
-      show: p("pos.inventory"),
-    },
-    {
-      id: "setup",
-      label: "Setup",
-      title: "Areas & tables setup",
-      section: "setup",
-      icon: "⚙",
-      show: p("pos.floor"),
-    },
-    {
-      id: "outlet",
-      label: "Outlet",
-      title: "GST, invoice & discount policy",
-      drawer: "settings",
-      icon: "🏪",
-      show: p("settings.view") || p("settings.all"),
-    },
-    {
-      id: "audit",
-      label: "Audit",
-      title: "Who changed what",
-      drawer: "audit",
-      icon: "📋",
-      show: p("audit.view"),
-    },
+    { id: "tables", label: "Tables", title: "Table floor & new orders", section: "tables", icon: "▦", perm: "pos.billing" },
+    { id: "menu", label: "Menu", title: "Menu catalog view", section: "menu", icon: "📖", perm: "pos.menu" },
+    { id: "bills", label: "Bills", title: "Settled bills & invoices", section: "bills", icon: "🧾", perm: "pos.bills" },
+    { id: "stock", label: "Stock", title: "Inventory & sales analytics", section: "inventory", icon: "📦", perm: "pos.inventory" },
+    { id: "setup", label: "Setup", title: "Areas & tables setup", section: "setup", icon: "⚙", perm: "pos.floor" },
+    { id: "outlet", label: "Outlet", title: "GST, invoice & discount policy", drawer: "settings", icon: "🏪", perm: "settings.view" },
+    { id: "audit", label: "Audit", title: "Who changed what", drawer: "audit", icon: "📋", perm: "audit.view" },
   ];
 
-  const visible = items.filter((i) => i.show);
+  const allowed = (item: ToolItem) => {
+    if (!item.perm) return true;
+    if (item.perm === "settings.view") return p("settings.view") || p("settings.all");
+    return p(item.perm);
+  };
 
   return (
     <header className="pp-pos-toolbar" aria-label="Quick actions">
@@ -99,7 +56,8 @@ export function PosTopToolbar({
         {outletRef && <span className="pp-pos-toolbar__ref">REF {outletRef}</span>}
       </div>
       <nav className="pp-pos-toolbar__icons" aria-label="POS shortcuts">
-        {visible.map((item) => {
+        {items.map((item) => {
+          const ok = allowed(item);
           const isSectionActive = item.section != null && activeSection === item.section && !openDrawer;
           const isDrawerActive = item.drawer != null && openDrawer === item.drawer;
           const isActive = isSectionActive || isDrawerActive;
@@ -107,9 +65,13 @@ export function PosTopToolbar({
             <button
               key={item.id}
               type="button"
-              className={`pp-pos-toolbar__btn ${isActive ? "pp-pos-toolbar__btn--on" : ""}`}
-              title={item.title}
+              className={`pp-pos-toolbar__btn ${isActive ? "pp-pos-toolbar__btn--on" : ""} ${ok ? "" : "pp-pos-toolbar__btn--locked"}`}
+              title={ok ? item.title : "You don't have permission for this operation."}
               onClick={() => {
+                if (!ok) {
+                  onDenied?.();
+                  return;
+                }
                 if (item.drawer) {
                   onDrawer(openDrawer === item.drawer ? null : item.drawer);
                   return;

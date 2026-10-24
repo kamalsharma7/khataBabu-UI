@@ -46,6 +46,8 @@ export interface MenuVariation {
   is_available?: boolean;
   weight_grams?: number | null;
   food_type?: FoodType | null;
+  parent_id?: string | null;
+  children?: MenuVariation[];
 }
 
 export interface MenuAddon {
@@ -56,6 +58,16 @@ export interface MenuAddon {
   is_available?: boolean;
   weight_grams?: number | null;
   food_type?: FoodType | null;
+  group_id?: string | null;
+}
+
+export interface MenuAddonGroup {
+  id: string;
+  name: string;
+  min_select: number;
+  max_select: number | null;
+  sort_order: number;
+  addons: MenuAddon[];
 }
 
 export type FoodType = "veg" | "non_veg" | "egg";
@@ -79,6 +91,7 @@ export interface MenuItem {
   sgst_percent?: string;
   variations: MenuVariation[];
   addons: MenuAddon[];
+  addon_groups?: MenuAddonGroup[];
 }
 
 export interface MenuVariationInput {
@@ -89,6 +102,7 @@ export interface MenuVariationInput {
   is_available?: boolean;
   weight_grams?: number | null;
   food_type?: FoodType | null;
+  children?: MenuVariationInput[];
 }
 
 export interface MenuAddonInput {
@@ -98,6 +112,14 @@ export interface MenuAddonInput {
   is_available?: boolean;
   weight_grams?: number | null;
   food_type?: FoodType | null;
+}
+
+export interface MenuAddonGroupInput {
+  name: string;
+  min_select?: number;
+  max_select?: number | null;
+  sort_order?: number;
+  addons: MenuAddonInput[];
 }
 
 export type OrderType = "dine_in" | "takeaway" | "delivery";
@@ -211,6 +233,9 @@ export interface PosBill {
   tax_amount: string;
   cgst_amount?: string;
   sgst_amount?: string;
+  igst_amount?: string;
+  tax_method?: string | null;
+  tax_label?: string | null;
   tip_amount?: string;
   round_off: string;
   grand_total: string;
@@ -608,6 +633,51 @@ export interface CustomerBackfillResult {
   customers_refreshed: number;
 }
 
+export interface StaffPermissionItem {
+  code: string;
+  label: string;
+  hint: string;
+  staff_assignable: boolean;
+  default_staff: boolean;
+  dangerous: boolean;
+}
+
+export interface StaffPermissionGroup {
+  id: string;
+  label: string;
+  staff_assignable: boolean;
+  permissions: StaffPermissionItem[];
+}
+
+export interface StaffMemberSummary {
+  id: string;
+  full_name: string;
+  username: string;
+  role: string;
+  is_active: boolean;
+}
+
+export interface StaffGrantRow extends StaffMemberSummary {
+  configured: boolean;
+  grants: Record<string, boolean>;
+}
+
+export interface StaffPermissionMatrix {
+  outlet_id: string;
+  outlet_name: string;
+  catalog: StaffPermissionGroup[];
+  managers: StaffMemberSummary[];
+  staff: StaffGrantRow[];
+}
+
+export interface MyPermissions {
+  outlet_id: string | null;
+  role: string;
+  can_manage_permissions: boolean;
+  source: "role" | "defaults" | "custom";
+  permissions: string[];
+}
+
 export type PurchasePaymentMode = "cash" | "upi" | "card" | "bank" | "credit" | "other";
 export type PurchasePaymentStatus = "unpaid" | "partial" | "paid";
 
@@ -800,4 +870,69 @@ export interface PosKot {
   notes: string | null;
   created_at: string;
   lines?: PosKotLine[];
+}
+
+export type TaxScheme = "gst" | "vat" | "other";
+export type GstSlab = "gst_5" | "gst_18" | "gst_40" | "igst" | "custom";
+export type TaxMethod = "forward" | "backward" | "tax_on_tax";
+
+export interface TaxProfile {
+  id: string;
+  outlet_id: string;
+  name: string;
+  scheme: TaxScheme;
+  gst_slab: GstSlab | null;
+  rate_percent: string;
+  cgst_percent: string;
+  sgst_percent: string;
+  igst_percent: string;
+  title: string;
+  cgst_title: string | null;
+  sgst_title: string | null;
+  igst_title: string | null;
+  title_suffix: string | null;
+  method: TaxMethod;
+  applies_dine_in: boolean;
+  applies_takeaway: boolean;
+  applies_delivery: boolean;
+  is_active: boolean;
+  scope: "venue" | "items";
+  menu_item_ids: string[];
+  sort_order: number;
+  notes: string | null;
+}
+
+export interface TaxProfileWrite {
+  name: string;
+  scheme: TaxScheme;
+  gst_slab?: GstSlab | null;
+  rate_percent: number;
+  method: TaxMethod;
+  title?: string;
+  cgst_title?: string | null;
+  sgst_title?: string | null;
+  igst_title?: string | null;
+  title_suffix?: string | null;
+  applies_dine_in: boolean;
+  applies_takeaway: boolean;
+  applies_delivery: boolean;
+  is_active: boolean;
+  scope?: "venue" | "items";
+  menu_item_ids?: string[];
+  notes?: string | null;
+}
+
+export interface TaxPreview {
+  amount_inr: string;
+  method: string;
+  tax_label: string | null;
+  tax_percent: string;
+  tax_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  guest_pays: string;
+  lines: { title: string; amount_inr: string }[];
+  applied: boolean;
+  note: string;
 }

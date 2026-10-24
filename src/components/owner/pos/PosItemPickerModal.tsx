@@ -1,11 +1,17 @@
 import { useMemo } from "react";
-import type { MenuItem } from "../../../types/owner";
+import type { MenuAddon, MenuAddonGroup, MenuItem, MenuVariation } from "../../../types/owner";
 import { billingLineDiet } from "../menu/menuFoodType";
 import {
-  availableAddons,
+  addonGroupHint,
+  addonGroupsValid,
+  availableAddonGroups,
   availableVariations,
   defaultVariationId,
+  hasNestedVariations,
   isModifierAvailable,
+  parentIdOfLeaf,
+  variationDisplayName,
+  variationRoots,
 } from "../menu/modifierUtils";
 import { dietStripeClass, fmt } from "./posUtils";
 
@@ -28,6 +34,21 @@ type Props = {
   onConfirm: (payload: PickerConfirmPayload) => void;
 };
 
+function availableRoots(item: MenuItem): MenuVariation[] {
+  return variationRoots(item).filter((root) => {
+    if (!isModifierAvailable(root.is_available)) return false;
+    if (root.children?.length) {
+      return root.children.some((c) => isModifierAvailable(c.is_available));
+    }
+    return true;
+  });
+}
+
+function sizesOfType(type: MenuVariation): MenuVariation[] {
+  if (!type.children?.length) return [type];
+  return type.children.filter((c) => isModifierAvailable(c.is_available));
+}
+
 export function PosItemPickerModal({
   item,
   variationId,
@@ -40,16 +61,23 @@ export function PosItemPickerModal({
   onClose,
   onConfirm,
 }: Props) {
-  const variations = availableVariations(item);
-  const addons = availableAddons(item);
+  const nested = hasNestedVariations(item);
+  const roots = availableRoots(item);
+  const leaves = availableVariations(item);
+  const groups = availableAddonGroups(item);
 
   const resolvedVariationId =
-    variationId && variations.some((v) => v.id === variationId)
+    variationId && leaves.some((v) => v.id === variationId)
       ? variationId
-      : defaultVariationId(item, variations) ?? "";
+      : defaultVariationId(item, leaves) ?? "";
 
-  const selectedVar = variations.find((v) => v.id === resolvedVariationId) ?? null;
-  const selectedAddons = addons.filter((a) => addonIds.includes(a.id));
+  const selectedTypeId =
+    (resolvedVariationId && parentIdOfLeaf(item, resolvedVariationId)) || roots[0]?.id || "";
+  const selectedType = roots.find((r) => r.id === selectedTypeId) ?? null;
+  const typeSizes = selectedType ? sizesOfType(selectedType) : leaves;
+
+  const selectedVar = leaves.find((v) => v.id === resolvedVariationId) ?? null;
+  const selectedAddons = groups.flatMap((g) => g.addons).filter((a) => addonIds.includes(a.id));
   const unitPrice = selectedVar ? parseFloat(selectedVar.price) : parseFloat(item.price);
   const addonsTotal = selectedAddons.reduce((s, a) => s + parseFloat(a.price), 0);
   const lineTotal = (unitPrice + addonsTotal) * qty;
@@ -61,18 +89,47 @@ export function PosItemPickerModal({
   const dietClass = dietStripeClass(lineFoodType);
 
   const hasVariationRows = (item.variations ?? []).length > 0;
-  const noSizesAvailable = hasVariationRows && variations.length === 0;
-  const variationRequired = variations.length > 0;
+  const noSizesAvailable = hasVariationRows && leaves.length === 0;
+  const variationRequired = leaves.length > 0;
+  const groupsOk = addonGroupsValid(item, addonIds);
   const canConfirm =
-    !busy && !noSizesAvailable && (!variationRequired || Boolean(resolvedVariationId));
+    !busy &&
+    !noSizesAvailable &&
+    (!variationRequired || Boolean(resolvedVariationId)) &&
+    groupsOk;
 
-  const toggleAddon = (id: string) => {
-    onAddonIds(
-      addonIds.includes(id) ? addonIds.filter((x) => x !== id) : [...addonIds, id],
-    );
+  const pickType = (type: MenuVariation) => {
+    const sizes = sizesOfType(type);
+    const next =
+      sizes.find((s) => s.is_default)?.id ??
+      defaultVariationId(item, sizes) ??
+      sizes[0]?.id ??
+      type.id;
+    onVariationId(next);
   };
 
-  const clearAddons = () => onAddonIds([]);
+  const toggleAddon = (group: MenuAddonGroup, addon: MenuAddon) => {
+    const groupIds = new Set(group.addons.map((a) => a.id));
+    const selectedInGroup = addonIds.filter((id) => groupIds.has(id));
+    const on = addonIds.includes(addon.id);
+    if (on) {
+      onAddonIds(addonIds.filter((id) => id !== addon.id));
+      return;
+    }
+    if (group.max_select === 1) {
+      onAddonIds([...addonIds.filter((id) => !groupIds.has(id)), addon.id]);
+      return;
+    }
+    if (group.max_select != null && selectedInGroup.length >= group.max_select) {
+      return;
+    }
+    onAddonIds([...addonIds, addon.id]);
+  };
+
+  const clearGroup = (group: MenuAddonGroup) => {
+    const groupIds = new Set(group.addons.map((a) => a.id));
+    onAddonIds(addonIds.filter((id) => !groupIds.has(id)));
+  };
 
   const handleConfirm = () => {
     onConfirm({
@@ -81,6 +138,8 @@ export function PosItemPickerModal({
       qty,
     });
   };
+
+  const selectedLabel = variationDisplayName(item, resolvedVariationId);
 
   return (
     <div className="modal-backdrop pos-picker-backdrop" role="presentation" onClick={onClose}>
@@ -96,12 +155,12 @@ export function PosItemPickerModal({
             <span className="pos-picker-sheet__diet" aria-hidden />
             <div>
               <h2 id="pos-picker-title">{item.name}</h2>
-              {variations.length === 0 && (
+              {leaves.length === 0 && (
                 <p className="pos-picker-sheet__base-price">{fmt(item.price)}</p>
               )}
-              {selectedVar && variations.length > 1 && (
+              {selectedVar && selectedLabel && (
                 <p className="pos-picker-sheet__base-price muted">
-                  {selectedVar.name} · {fmt(selectedVar.price)}
+                  {selectedLabel} · {fmt(selectedVar.price)}
                 </p>
               )}
               {item.gst_applicable && (
@@ -129,14 +188,42 @@ export function PosItemPickerModal({
         </header>
 
         <div className="pos-picker-sheet__body">
-          {variations.length > 0 && (
+          {nested && roots.length > 0 && (
             <section className="pos-picker-block">
               <div className="pos-picker-block__head">
-                <p className="pos-picker-block__label">Choose size / variation</p>
+                <p className="pos-picker-block__label">Choose type</p>
                 <span className="pos-picker-block__hint">Required · one only</span>
               </div>
-              <div className="pos-picker-var-list" role="radiogroup" aria-label="Variation">
-                {variations.map((v) => {
+              <div className="pos-picker-types" role="tablist" aria-label="Type">
+                {roots.map((type) => {
+                  const on = selectedTypeId === type.id;
+                  return (
+                    <button
+                      key={type.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      className={`pos-picker-type ${on ? "pos-picker-type--on" : ""}`}
+                      onClick={() => pickType(type)}
+                    >
+                      {type.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {typeSizes.length > 0 && (
+            <section className="pos-picker-block">
+              <div className="pos-picker-block__head">
+                <p className="pos-picker-block__label">
+                  {nested ? `Choose size${selectedType ? ` · ${selectedType.name}` : ""}` : "Choose size / variation"}
+                </p>
+                <span className="pos-picker-block__hint">Required · one only</span>
+              </div>
+              <div className="pos-picker-var-list" role="radiogroup" aria-label="Size">
+                {typeSizes.map((v) => {
                   const selected = resolvedVariationId === v.id;
                   return (
                     <button
@@ -155,7 +242,7 @@ export function PosItemPickerModal({
                         {v.weight_grams != null && (
                           <span className="pos-picker-var__meta">{v.weight_grams} g</span>
                         )}
-                        {v.is_default && variations.length > 1 && (
+                        {v.is_default && typeSizes.length > 1 && (
                           <span className="pos-picker-var__meta">Default</span>
                         )}
                       </span>
@@ -167,70 +254,85 @@ export function PosItemPickerModal({
             </section>
           )}
 
-          {addons.length > 0 && (
-            <section className="pos-picker-block">
-              <div className="pos-picker-block__head">
-                <p className="pos-picker-block__label">Toppings & add-ons</p>
-                <span className="pos-picker-block__hint">Optional · select any</span>
-              </div>
-              {selectedAddons.length > 0 && (
-                <div className="pos-picker-addon-summary">
-                  <span className="pos-picker-addon-summary__text">
-                    {selectedAddons.length} selected (+{fmt(addonsTotal)})
+          {groups.map((group) => {
+            const selectedInGroup = group.addons.filter((a) => addonIds.includes(a.id));
+            const groupTotal = selectedInGroup.reduce((s, a) => s + parseFloat(a.price), 0);
+            const atMax =
+              group.max_select != null && selectedInGroup.length >= group.max_select;
+            return (
+              <section key={group.id} className="pos-picker-block">
+                <div className="pos-picker-block__head">
+                  <p className="pos-picker-block__label">{group.name}</p>
+                  <span className="pos-picker-block__hint">
+                    {addonGroupHint(group.min_select, group.max_select)}
                   </span>
-                  <button
-                    type="button"
-                    className="pos-picker-addon-summary__clear"
-                    onClick={clearAddons}
-                    disabled={busy}
-                  >
-                    Clear
-                  </button>
                 </div>
-              )}
-              <div className="pos-picker-addon-list">
-                {addons.map((a) => {
-                  const on = addonIds.includes(a.id);
-                  return (
+                {selectedInGroup.length > 0 && (
+                  <div className="pos-picker-addon-summary">
+                    <span className="pos-picker-addon-summary__text">
+                      {selectedInGroup.length} selected (+{fmt(groupTotal)})
+                    </span>
                     <button
-                      key={a.id}
                       type="button"
-                      className={`pos-picker-addon ${on ? "pos-picker-addon--on" : ""}`}
-                      onClick={() => toggleAddon(a.id)}
-                      aria-pressed={on}
+                      className="pos-picker-addon-summary__clear"
+                      onClick={() => clearGroup(group)}
+                      disabled={busy}
                     >
-                      <span className="pos-picker-addon__check" aria-hidden>
-                        {on ? (
-                          <svg width="14" height="14" viewBox="0 0 14 14">
-                            <path
-                              d="M2.5 7.2 5.5 10.2 11.5 3.8"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        ) : null}
-                      </span>
-                      <span className="pos-picker-addon__name">{a.name}</span>
-                      <span className="pos-picker-addon__price">+{fmt(a.price)}</span>
+                      Clear
                     </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+                  </div>
+                )}
+                <div className="pos-picker-addon-list">
+                  {group.addons.map((a) => {
+                    const on = addonIds.includes(a.id);
+                    const lockedOut = !on && atMax && group.max_select !== 1;
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className={`pos-picker-addon ${on ? "pos-picker-addon--on" : ""}`}
+                        onClick={() => toggleAddon(group, a)}
+                        aria-pressed={on}
+                        disabled={lockedOut}
+                      >
+                        <span className="pos-picker-addon__check" aria-hidden>
+                          {on ? (
+                            <svg width="14" height="14" viewBox="0 0 14 14">
+                              <path
+                                d="M2.5 7.2 5.5 10.2 11.5 3.8"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : null}
+                        </span>
+                        <span className="pos-picker-addon__name">{a.name}</span>
+                        <span className="pos-picker-addon__price">+{fmt(a.price)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
 
           {noSizesAvailable && (
             <p className="pos-picker-sheet__note form-error">
-              All sizes are off — turn a variation on in Menu, or add toppings only on a base item.
+              All sizes are off — turn a type or size on in Menu.
             </p>
           )}
           {!noSizesAvailable &&
-            (item.variations ?? []).some((v) => !isModifierAvailable(v.is_available)) && (
+            variationLeavesHidden(item) && (
               <p className="pos-picker-sheet__note muted">Some sizes are hidden (out of stock).</p>
             )}
+          {!groupsOk && (
+            <p className="pos-picker-sheet__note form-error">
+              Finish required toppings before adding this item.
+            </p>
+          )}
 
           <section className="pos-picker-block pos-picker-block--qty">
             <p className="pos-picker-block__label">Quantity</p>
@@ -286,4 +388,12 @@ export function PosItemPickerModal({
       </div>
     </div>
   );
+}
+
+function variationLeavesHidden(item: MenuItem): boolean {
+  for (const root of variationRoots(item)) {
+    if (!isModifierAvailable(root.is_available)) return true;
+    if (root.children?.some((c) => !isModifierAvailable(c.is_available))) return true;
+  }
+  return false;
 }

@@ -72,6 +72,20 @@ export class OwnerApiError extends Error {
   }
 }
 
+type DeniedListener = (message: string) => void;
+const deniedListeners = new Set<DeniedListener>();
+
+export function onOwnerPermissionDenied(listener: DeniedListener): () => void {
+  deniedListeners.add(listener);
+  return () => {
+    deniedListeners.delete(listener);
+  };
+}
+
+function notifyPermissionDenied(message: string): void {
+  deniedListeners.forEach((fn) => fn(message));
+}
+
 function analyticsStorageKey(outletId: string): string {
   return `khatababu_analytics_${outletId}`;
 }
@@ -119,6 +133,11 @@ export async function ownerApiRequest<T>(
         detail =
           "Server error — if you recently updated the app, run database migrations (alembic upgrade head) and restart the API.";
       }
+    }
+    if (response.status === 403) {
+      notifyPermissionDenied(
+        detail && detail.length < 180 ? detail : "You don't have permission for this operation.",
+      );
     }
     throw new OwnerApiError(response.status, detail);
   }

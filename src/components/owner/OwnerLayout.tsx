@@ -1,20 +1,55 @@
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import type { MouseEvent } from "react";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import { useOwnerPermissions } from "../../context/OwnerPermissionsContext";
+
+type NavItem = {
+  to: string;
+  label: string;
+  end?: boolean;
+  primary?: boolean;
+  perm?: string;
+  any?: string[];
+  managerOnly?: boolean;
+};
+
+const NAV: NavItem[] = [
+  { to: "/app", label: "Welcome", end: true },
+  { to: "/app/overview", label: "Overview", perm: "analytics.overview" },
+  { to: "/app/pos", label: "Billing", perm: "pos.billing", primary: true },
+  { to: "/app/floor", label: "Table setup", perm: "pos.floor" },
+  { to: "/app/menu", label: "Menu", perm: "pos.menu" },
+  { to: "/app/recipes", label: "Item recipes", perm: "recipes.manage" },
+  { to: "/app/tax", label: "Tax", any: ["tax.view", "tax.edit"] },
+  { to: "/app/raw-materials", label: "Raw materials", perm: "pos.inventory" },
+  { to: "/app/purchases", label: "Purchases", perm: "purchases.manage" },
+  { to: "/app/customers", label: "Customers (CRM)", perm: "crm.view" },
+  { to: "/app/staff", label: "Staff permissions", perm: "staff.permissions", managerOnly: true },
+  { to: "/app/settings", label: "Settings", any: ["settings.view", "settings.all"] },
+  { to: "/app/audit", label: "Audit log", perm: "audit.view" },
+];
 
 export function OwnerLayout() {
   const { profile, logout } = useOwnerAuth();
   const { outlets, outlet, setOutletId, loading } = useOwnerOutlet();
+  const { can, canAny, canManage, showDenied, banner, dismissBanner } = useOwnerPermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const isPos = location.pathname.startsWith("/app/pos");
-  const perms = profile?.permissions ?? [];
-  const canOverview = perms.includes("analytics.overview");
-  const canMenu = perms.includes("pos.menu");
-  const canInventory = perms.includes("pos.inventory");
-  const canFloor = perms.includes("pos.floor");
-  const canSettings = perms.includes("settings.view") || perms.includes("settings.all");
-  const canAudit = perms.includes("audit.view");
+
+  const allowed = (item: NavItem) => {
+    if (item.managerOnly) return canManage;
+    if (item.any) return canAny(...item.any);
+    if (item.perm) return can(item.perm);
+    return true;
+  };
+
+  const onNav = (item: NavItem, e: MouseEvent<HTMLAnchorElement>) => {
+    if (allowed(item)) return;
+    e.preventDefault();
+    showDenied();
+  };
 
   const handleLogout = () => {
     logout();
@@ -74,61 +109,37 @@ export function OwnerLayout() {
         </div>
       </header>
 
+      {banner && (
+        <div className="perm-banner" role="alert">
+          <span>{banner}</span>
+          <button type="button" onClick={dismissBanner} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
       <div className={`platform-body owner-body ${isPos ? "owner-body--pos" : ""}`}>
         {!isPos && (
         <aside className="platform-sidebar owner-sidebar">
           <nav className="platform-nav">
-            <NavLink to="/app" end className="platform-nav__link">
-              Welcome
-            </NavLink>
-            {canOverview && (
-            <NavLink to="/app/overview" className="platform-nav__link">
-              Overview
-            </NavLink>
-            )}
-            <NavLink to="/app/pos" className="platform-nav__link platform-nav__link--primary">
-              Billing
-            </NavLink>
-            {canFloor && (
-            <NavLink to="/app/floor" className="platform-nav__link">
-              Table setup
-            </NavLink>
-            )}
-            {canMenu && (
-            <NavLink to="/app/menu" className="platform-nav__link">
-              Menu
-            </NavLink>
-            )}
-            {canMenu && (
-            <NavLink to="/app/recipes" className="platform-nav__link">
-              Item recipes
-            </NavLink>
-            )}
-            {canInventory && (
-            <NavLink to="/app/raw-materials" className="platform-nav__link">
-              Raw materials
-            </NavLink>
-            )}
-            {canInventory && (
-            <NavLink to="/app/purchases" className="platform-nav__link">
-              Purchases
-            </NavLink>
-            )}
-            {canOverview && (
-            <NavLink to="/app/customers" className="platform-nav__link">
-              Customers (CRM)
-            </NavLink>
-            )}
-            {canSettings && (
-            <NavLink to="/app/settings" className="platform-nav__link">
-              Settings
-            </NavLink>
-            )}
-            {canAudit && (
-            <NavLink to="/app/audit" className="platform-nav__link">
-              Audit log
-            </NavLink>
-            )}
+            {NAV.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={(e) => onNav(item, e)}
+                className={({ isActive }) =>
+                  [
+                    "platform-nav__link",
+                    item.primary ? "platform-nav__link--primary" : "",
+                    isActive ? "active" : "",
+                    !allowed(item) ? "platform-nav__link--locked" : "",
+                  ].filter(Boolean).join(" ")
+                }
+                title={!allowed(item) ? "You don't have permission for this operation." : undefined}
+              >
+                {item.label}
+                {!allowed(item) && <span className="perm-lock" aria-hidden>🔒</span>}
+              </NavLink>
+            ))}
           </nav>
           {outlet && (
             <p className="platform-sidebar__note">

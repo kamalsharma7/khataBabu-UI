@@ -245,7 +245,7 @@ export function OnboardingPage() {
             />
             <label className="field field--checkbox field--full">
               <input type="checkbox" checked={gstRegistered} onChange={(e) => setGstRegistered(e.target.checked)} />
-              <span>GST registered</span>
+              <span>GST registered — prints GSTIN on invoices. Tax on bills is set later under Tax, not from this number.</span>
             </label>
             {gstRegistered && (
               <label className="field field--full">

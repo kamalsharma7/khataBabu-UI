@@ -1,10 +1,25 @@
 import { Link } from "react-router-dom";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import { useOwnerPermissions } from "../../context/OwnerPermissionsContext";
+
+const CARDS: { to: string; title: string; copy: string; cta: string; perm?: string; highlight?: boolean }[] = [
+  { to: "/app/overview", title: "Overview", copy: "Sales, collections, and orders — PIN protected for owners.", cta: "View overview →", perm: "analytics.overview" },
+  { to: "/app/pos", title: "Billing", copy: "Take orders, send KOT, and settle tables — main POS screen.", cta: "Open billing →", perm: "pos.billing", highlight: true },
+  { to: "/app/floor", title: "Table setup", copy: "Add areas and tables to match your floor plan.", cta: "Open table setup →", perm: "pos.floor" },
+  { to: "/app/menu", title: "Menu", copy: "Categories and items for POS and kitchen.", cta: "Manage menu →", perm: "pos.menu" },
+  { to: "/app/raw-materials", title: "Raw materials", copy: "Flour, oil, chicken, packaging — opening stock, purchase, wastage.", cta: "Manage stock →", perm: "pos.inventory" },
+  { to: "/app/customers", title: "Customers (CRM)", copy: "Who comes, how often, what they like — built from the numbers you save at billing.", cta: "Open CRM →", perm: "crm.view" },
+  { to: "/app/purchases", title: "Purchases", copy: "Vendor bills, payments due, and invoices — stock in from purchases.", cta: "View purchases →", perm: "purchases.manage" },
+  { to: "/app/recipes", title: "Item recipes", copy: "BOM per dish. Linked recipes deduct raw materials on KOT.", cta: "Manage recipes →", perm: "recipes.manage" },
+  { to: "/app/tax", title: "Add tax", copy: "GST / VAT on bills. Optional — GSTIN on the invoice does not turn this on.", cta: "Set tax →", perm: "tax.view" },
+  { to: "/app/staff", title: "Staff permissions", copy: "Tick what the receptionist can do at this venue.", cta: "Set permissions →", perm: "staff.permissions" },
+];
 
 export function OwnerDashboardPage() {
   const { profile } = useOwnerAuth();
   const { outlet, loading, error } = useOwnerOutlet();
+  const { can, canManage, showDenied } = useOwnerPermissions();
 
   return (
     <div className="page owner-welcome">
@@ -43,46 +58,31 @@ export function OwnerDashboardPage() {
           </section>
 
           <div className="owner-quick-grid">
-            <Link to="/app/overview" className="owner-quick-card card">
-              <h2>Overview</h2>
-              <p className="muted">Sales, collections, and orders — PIN protected for owners.</p>
-              <span className="owner-quick-card__cta">View overview →</span>
-            </Link>
-            <Link to="/app/pos" className="owner-quick-card card owner-quick-card--highlight">
-              <h2>Billing</h2>
-              <p className="muted">Take orders, send KOT, and settle tables — main POS screen.</p>
-              <span className="owner-quick-card__cta">Open billing →</span>
-            </Link>
-            <Link to="/app/floor" className="owner-quick-card card">
-              <h2>Table setup</h2>
-              <p className="muted">Add areas and tables to match your floor plan.</p>
-              <span className="owner-quick-card__cta">Open table setup →</span>
-            </Link>
-            <Link to="/app/menu" className="owner-quick-card card">
-              <h2>Menu</h2>
-              <p className="muted">Categories and items for POS and kitchen.</p>
-              <span className="owner-quick-card__cta">Manage menu →</span>
-            </Link>
-            <Link to="/app/raw-materials" className="owner-quick-card card">
-              <h2>Raw materials</h2>
-              <p className="muted">Flour, oil, chicken, packaging — opening stock, purchase, wastage.</p>
-              <span className="owner-quick-card__cta">Manage stock →</span>
-            </Link>
-            <Link to="/app/customers" className="owner-quick-card card">
-              <h2>Customers (CRM)</h2>
-              <p className="muted">Who comes, how often, what they like — built from the numbers you save at billing.</p>
-              <span className="owner-quick-card__cta">Open CRM →</span>
-            </Link>
-            <Link to="/app/purchases" className="owner-quick-card card">
-              <h2>Purchases</h2>
-              <p className="muted">Vendor bills, payments due, and invoices — stock in from purchases.</p>
-              <span className="owner-quick-card__cta">View purchases →</span>
-            </Link>
-            <Link to="/app/recipes" className="owner-quick-card card">
-              <h2>Item recipes</h2>
-              <p className="muted">BOM per dish. Linked recipes deduct raw materials on KOT.</p>
-              <span className="owner-quick-card__cta">Manage recipes →</span>
-            </Link>
+            {CARDS.map((card) => {
+              const ok =
+                card.perm === "staff.permissions"
+                  ? canManage
+                  : card.perm === "tax.view"
+                    ? can("tax.view") || can("tax.edit")
+                    : !card.perm || can(card.perm);
+              return (
+                <Link
+                  key={card.to}
+                  to={card.to}
+                  className={`owner-quick-card card ${card.highlight ? "owner-quick-card--highlight" : ""} ${ok ? "" : "owner-quick-card--locked"}`}
+                  onClick={(e) => {
+                    if (!ok) {
+                      e.preventDefault();
+                      showDenied();
+                    }
+                  }}
+                >
+                  <h2>{card.title}{!ok && " 🔒"}</h2>
+                  <p className="muted">{card.copy}</p>
+                  <span className="owner-quick-card__cta">{ok ? card.cta : "You don't have permission for this operation."}</span>
+                </Link>
+              );
+            })}
           </div>
         </>
       )}

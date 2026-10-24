@@ -50,8 +50,8 @@ import {
   fetchDiscountPolicy,
 } from "../../api/owner";
 import { OwnerApiError } from "../../api/ownerClient";
-import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import { useOwnerPermissions } from "../../context/OwnerPermissionsContext";
 import type { DiscountPolicy } from "../../types/owner";
 import type {
   FloorTableStatus,
@@ -66,8 +66,7 @@ import type {
 
 export function OwnerPosPage() {
   const { outlet } = useOwnerOutlet();
-  const { profile } = useOwnerAuth();
-  const perms = profile?.permissions ?? [];
+  const { permissions: perms, can, showDenied } = useOwnerPermissions();
   const [screen, setScreen] = useState<"floor" | "order">("floor");
   const [floor, setFloor] = useState<Awaited<ReturnType<typeof posFloor>> | null>(null);
   const [categories, setCategories] = useState<Awaited<ReturnType<typeof listMenuCategories>>>([]);
@@ -88,6 +87,8 @@ export function OwnerPosPage() {
   const [settleOpen, setSettleOpen] = useState(false);
   const [bill, setBill] = useState<PosBill | null>(null);
   const [taxPercent, setTaxPercent] = useState("0");
+  const [applyTax, setApplyTax] = useState(false);
+  const [taxEnabled, setTaxEnabled] = useState(false);
   const [discountPercent, setDiscountPercent] = useState("0");
   const [discountAmount, setDiscountAmount] = useState("0");
   const [tipAmount, setTipAmount] = useState("0");
@@ -108,6 +109,7 @@ export function OwnerPosPage() {
 
   const billPreviewBody = useCallback(
     () => ({
+      apply_tax: applyTax,
       tax_percent: parseFloat(taxPercent) || 0,
       discount_percent: parseFloat(discountPercent) || 0,
       discount_amount: parseFloat(discountAmount) || 0,
@@ -115,7 +117,7 @@ export function OwnerPosPage() {
       round_to_rupee: true,
       manager_approval_pin: managerPin.trim() || undefined,
     }),
-    [taxPercent, discountPercent, discountAmount, tipAmount, managerPin],
+    [applyTax, taxPercent, discountPercent, discountAmount, tipAmount, managerPin],
   );
 
   const loadOrderExtras = useCallback(
@@ -217,7 +219,7 @@ export function OwnerPosPage() {
             const b = await posCreateBill(outlet.id, order.id, {
               discount_amount: parseFloat(discountAmount) || 0,
               discount_percent: parseFloat(discountPercent) || 0,
-              tax_percent: parseFloat(taxPercent) || 0,
+              apply_tax: applyTax,
               round_to_rupee: true,
             });
             setBill(b);
@@ -231,7 +233,7 @@ export function OwnerPosPage() {
         setBusy(false);
       }
     },
-    [outlet, order, bill, discountAmount, discountPercent, taxPercent, refreshFloor],
+    [outlet, order, bill, discountAmount, discountPercent, applyTax, refreshFloor],
   );
 
   const loadCatalog = useCallback(async () => {
@@ -249,11 +251,18 @@ export function OwnerPosPage() {
     try {
       const s = await posBillingSettings(outlet.id);
       const tax = parseFloat(s.default_tax_percent) || 0;
+      const enabled = Boolean(s.tax_enabled);
       setTaxPercent(String(tax));
-      if (s.gst_registered && s.gstin) {
-        setGstHint(`GST ${s.gstin} · tax ${tax}%`);
+      setTaxEnabled(enabled);
+      setApplyTax(enabled);
+      const method =
+        s.default_method === "backward" ? "inclusive" : s.default_method === "tax_on_tax" ? "tax-on-tax" : "exclusive";
+      if (enabled && s.tax_label) {
+        setGstHint(`${s.tax_label} · ${method}${s.gstin ? ` · GSTIN ${s.gstin}` : ""}`);
+      } else if (s.gstin) {
+        setGstHint(`GSTIN ${s.gstin} · tax off`);
       } else {
-        setGstHint(null);
+        setGstHint("No tax on bills");
       }
     } catch {
       setGstHint(null);
@@ -417,7 +426,20 @@ export function OwnerPosPage() {
     }
   }, [outlet]);
 
+  const sectionPerm: Record<PosBillingSection, string | null> = {
+    tables: "pos.billing",
+    setup: "pos.floor",
+    menu: "pos.menu",
+    inventory: "pos.inventory",
+    bills: "pos.bills",
+  };
+
   const onBillingNavSelect = (section: PosBillingSection) => {
+    const need = sectionPerm[section];
+    if (need && !can(need)) {
+      showDenied();
+      return;
+    }
     setToolDrawer(null);
     setBillingSection(section);
     if (section === "tables") {
@@ -639,10 +661,10 @@ export function OwnerPosPage() {
     }
   };
 
-  const refreshBillPreview = async () => {
+  const refreshBillPreview = async (override?: { apply_tax?: boolean }) => {
     if (!outlet || !order) return null;
     await orderMutationTail.current;
-    const b = await posCreateBill(outlet.id, order.id, billPreviewBody());
+    const b = await posCreateBill(outlet.id, order.id, { ...billPreviewBody(), ...override });
     setBill(b);
     return b;
   };
@@ -655,8 +677,8 @@ export function OwnerPosPage() {
     });
   }, []);
 
-  const refreshSettleBill = async () => {
-    const b = await refreshBillPreview();
+  const refreshSettleBill = async (override?: { apply_tax?: boolean }) => {
+    const b = await refreshBillPreview(override);
     if (b) syncPaymentsToBillBalance(b);
     return b;
   };
@@ -761,10 +783,10 @@ export function OwnerPosPage() {
         active={billingSection}
         onToggle={() => setNavOpen((o) => !o)}
         onSelect={onBillingNavSelect}
-        allowSetup={perms.includes("pos.floor")}
-        allowMenu={perms.includes("pos.menu")}
-        allowInventory={perms.includes("pos.inventory")}
-        allowBills={perms.includes("pos.bills")}
+        allowSetup
+        allowMenu
+        allowInventory
+        allowBills
       />
       <div className="pp-billing-main">
         <PosTopToolbar
@@ -774,6 +796,7 @@ export function OwnerPosPage() {
           permissions={perms}
           onSection={onBillingNavSelect}
           onDrawer={setToolDrawer}
+          onDenied={showDenied}
         />
         {toolDrawer === "settings" && (
           <PosToolDrawer title="Outlet &amp; invoice settings" onClose={() => setToolDrawer(null)}>
@@ -920,12 +943,16 @@ export function OwnerPosPage() {
           busy={busy}
           discountPercent={discountPercent}
           discountAmount={discountAmount}
-          taxPercent={taxPercent}
+          applyTax={applyTax}
+          taxEnabled={taxEnabled}
           tipAmount={tipAmount}
           payments={payments}
           onDiscountPercent={setDiscountPercent}
           onDiscountAmount={setDiscountAmount}
-          onTaxPercent={setTaxPercent}
+          onApplyTax={(v) => {
+            setApplyTax(v);
+            void refreshSettleBill({ apply_tax: v });
+          }}
           onTipAmount={setTipAmount}
           onApplyAdjustments={() => void refreshSettleBill()}
           onPaymentsChange={setPayments}

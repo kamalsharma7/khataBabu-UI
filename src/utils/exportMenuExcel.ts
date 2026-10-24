@@ -9,14 +9,36 @@ function dietLabel(item: MenuItem): string {
 
 function formatVariations(item: MenuItem): string {
   if (!item.variations?.length) return "";
-  return item.variations
-    .map((v) => `${v.name}: ₹${v.price}${v.is_default ? " (default)" : ""}`)
-    .join("; ");
+  const parts: string[] = [];
+  for (const type of item.variations) {
+    const sizes = type.children ?? [];
+    if (!sizes.length) {
+      parts.push(`${type.name}: ₹${type.price}${type.is_default ? " (default)" : ""}`);
+      continue;
+    }
+    for (const size of sizes) {
+      parts.push(
+        `${type.name} · ${size.name}: ₹${size.price}${size.is_default ? " (default)" : ""}`,
+      );
+    }
+  }
+  return parts.join("; ");
 }
 
 function formatAddons(item: MenuItem): string {
-  if (!item.addons?.length) return "";
-  return item.addons.map((a) => `${a.name}: +₹${a.price}`).join("; ");
+  const groups = item.addon_groups?.length
+    ? item.addon_groups
+    : item.addons?.length
+      ? [{ name: "Toppings", addons: item.addons }]
+      : [];
+  if (!groups.length) return "";
+  return groups
+    .map((g) => {
+      const extras = g.addons.map((a) => `${a.name}: +₹${a.price}`).join(", ");
+      return extras ? `${g.name}: ${extras}` : "";
+    })
+    .filter(Boolean)
+    .join(" | ");
 }
 
 export async function downloadMenuExcel(

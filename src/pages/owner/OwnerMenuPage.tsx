@@ -13,102 +13,19 @@ import { OwnerApiError } from "../../api/ownerClient";
 import { MenuItemModifierSummary } from "../../components/owner/menu/MenuItemModifierSummary";
 import {
   MenuModifierFields,
-  type AddonRow,
+  defaultLeafPrice,
+  emptyAddonGroup,
+  emptyVariation,
+  itemToAddonGroupRows,
+  itemToVariationRows,
+  rowsToAddonGroups,
+  rowsToVariations,
+  type AddonGroupRow,
   type VariationRow,
 } from "../../components/owner/menu/MenuModifierFields";
-import { dietFromSelect, dietSelectValue } from "../../components/owner/menu/menuFoodType";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
 import { downloadMenuExcel } from "../../utils/exportMenuExcel";
-import type {
-  MenuAddonInput,
-  MenuCategory,
-  MenuItem,
-  MenuVariationInput,
-} from "../../types/owner";
-
-const emptyVariation = (defaultSize = false): VariationRow => ({
-  name: "",
-  price: "",
-  is_default: defaultSize,
-  is_available: true,
-  weight_grams: "",
-  food_type: "",
-});
-const emptyAddon = (): AddonRow => ({
-  name: "",
-  price: "",
-  is_available: true,
-  weight_grams: "",
-  food_type: "",
-});
-
-function parseWeightGrams(raw: string): number | null {
-  const n = parseInt(raw.trim(), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-function rowsToVariations(rows: VariationRow[]): MenuVariationInput[] {
-  const filled = rows.filter((r) => r.name.trim());
-  const defaultCount = filled.filter((r) => r.is_default).length;
-  if (filled.length > 0 && defaultCount > 1) {
-    throw new Error("Only one variation can be default");
-  }
-  if (filled.length > 0 && defaultCount === 0) {
-    filled[0] = { ...filled[0], is_default: true };
-  }
-  const names = filled.map((r) => r.name.trim().toLowerCase());
-  if (new Set(names).size !== names.length) {
-    throw new Error("Variation names must be unique");
-  }
-  return filled.map((r, i) => ({
-    name: r.name.trim(),
-    price: parseFloat(r.price) || 0,
-    sort_order: i,
-    is_default: r.is_default,
-    is_available: r.is_available,
-    weight_grams: parseWeightGrams(r.weight_grams),
-    food_type: dietFromSelect(r.food_type),
-  }));
-}
-
-function rowsToAddons(rows: AddonRow[]): MenuAddonInput[] {
-  const filled = rows.filter((r) => r.name.trim());
-  const names = filled.map((r) => r.name.trim().toLowerCase());
-  if (new Set(names).size !== names.length) {
-    throw new Error("Topping names must be unique");
-  }
-  return filled.map((r, i) => ({
-    name: r.name.trim(),
-    price: parseFloat(r.price) || 0,
-    sort_order: i,
-    is_available: r.is_available,
-    weight_grams: parseWeightGrams(r.weight_grams),
-    food_type: dietFromSelect(r.food_type),
-  }));
-}
-
-function itemToVariationRows(item: MenuItem): VariationRow[] {
-  if (!item.variations?.length) return [emptyVariation()];
-  return item.variations.map((v) => ({
-    name: v.name,
-    price: String(v.price),
-    is_default: v.is_default,
-    is_available: v.is_available ?? true,
-    weight_grams: v.weight_grams != null ? String(v.weight_grams) : "",
-    food_type: dietSelectValue(v.food_type),
-  }));
-}
-
-function itemToAddonRows(item: MenuItem): AddonRow[] {
-  if (!item.addons?.length) return [emptyAddon()];
-  return item.addons.map((a) => ({
-    name: a.name,
-    price: String(a.price),
-    is_available: a.is_available !== false,
-    weight_grams: a.weight_grams != null ? String(a.weight_grams) : "",
-    food_type: dietSelectValue(a.food_type),
-  }));
-}
+import type { MenuCategory, MenuItem } from "../../types/owner";
 
 function dietStripeClass(item: MenuItem): string {
   const ft = item.food_type ?? (item.is_veg ? "veg" : "non_veg");
@@ -147,11 +64,11 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
     sgst_percent: "2.5",
   });
   const [newVariations, setNewVariations] = useState<VariationRow[]>([emptyVariation(true)]);
-  const [newAddons, setNewAddons] = useState<AddonRow[]>([emptyAddon()]);
+  const [newGroups, setNewGroups] = useState<AddonGroupRow[]>([emptyAddonGroup()]);
 
   const [editItem, setEditItem] = useState<MenuItem | null>(null);
   const [editVariations, setEditVariations] = useState<VariationRow[]>([]);
-  const [editAddons, setEditAddons] = useState<AddonRow[]>([]);
+  const [editGroups, setEditGroups] = useState<AddonGroupRow[]>([]);
 
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [priceDraft, setPriceDraft] = useState("");
@@ -210,11 +127,9 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
     if (!outlet) return;
     try {
       const variations = rowsToVariations(newVariations);
-      const addons = rowsToAddons(newAddons);
-      const basePrice =
-        variations.length > 0
-          ? variations.find((v) => v.is_default)?.price ?? variations[0].price
-          : parseFloat(itemForm.price);
+      const addon_groups = rowsToAddonGroups(newGroups);
+      const leafPrice = defaultLeafPrice(newVariations);
+      const basePrice = leafPrice ?? parseFloat(itemForm.price);
       await createMenuItem(outlet.id, {
         category_id: itemForm.category_id,
         name: itemForm.name.trim(),
@@ -226,11 +141,11 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
         cgst_percent: parseFloat(itemForm.cgst_percent) || 0,
         sgst_percent: parseFloat(itemForm.sgst_percent) || 0,
         variations,
-        addons,
+        addon_groups,
       });
       setItemForm((f) => ({ ...f, name: "", price: "", short_code: "" }));
       setNewVariations([emptyVariation(true)]);
-      setNewAddons([emptyAddon()]);
+      setNewGroups([emptyAddonGroup()]);
       await load();
     } catch (err) {
       alert(err instanceof Error ? err.message : err instanceof OwnerApiError ? err.message : "Failed");
@@ -314,7 +229,7 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
   const openEditModifiers = (item: MenuItem) => {
     setEditItem(item);
     setEditVariations(itemToVariationRows(item));
-    setEditAddons(itemToAddonRows(item));
+    setEditGroups(itemToAddonGroupRows(item));
   };
 
   const saveEditModifiers = async () => {
@@ -322,7 +237,8 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
     try {
       await replaceMenuItemModifiers(outlet.id, editItem.id, {
         variations: rowsToVariations(editVariations),
-        addons: rowsToAddons(editAddons),
+        addons: [],
+        addon_groups: rowsToAddonGroups(editGroups),
       });
       setEditItem(null);
       await load();
@@ -331,15 +247,9 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
     }
   };
 
-  const setDefaultVariation = (
-    rows: VariationRow[],
-    setRows: (r: VariationRow[]) => void,
-    index: number,
-  ) => {
-    setRows(rows.map((r, i) => ({ ...r, is_default: i === index })));
-  };
-
-  const hasVariationsInForm = newVariations.some((r) => r.name.trim());
+  const hasVariationsInForm =
+    newVariations.some((r) => r.name.trim()) ||
+    newVariations.some((r) => (r.children ?? []).some((c) => c.name.trim()));
 
   if (!outlet) return <p className="muted">No outlet found.</p>;
 
@@ -534,14 +444,9 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
                   <MenuModifierFields
                     variations={newVariations}
                     setVariations={setNewVariations}
-                    addons={newAddons}
-                    setAddons={setNewAddons}
+                    groups={newGroups}
+                    setGroups={setNewGroups}
                     variationRadioName="new-default-var"
-                    emptyVariation={emptyVariation}
-                    emptyAddon={emptyAddon}
-                    onSetDefaultVariation={(idx) =>
-                      setDefaultVariation(newVariations, setNewVariations, idx)
-                    }
                   />
 
                   <button type="submit" className="btn btn-primary" disabled={categories.length === 0}>
@@ -638,7 +543,7 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
                                       </button>
                                       {(item.variations?.length ?? 0) > 0 && (
                                         <span className="menu-mgmt-row__price-hint muted">
-                                          Size prices → Variations & toppings
+                                          Sellable prices live on types / sizes
                                         </span>
                                       )}
                                     </>
@@ -660,7 +565,7 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
                                 className="btn btn-primary btn-sm"
                                 onClick={() => openEditModifiers(item)}
                               >
-                                Variations & toppings
+                                Types, sizes & toppings
                               </button>
                               <button
                                 type="button"
@@ -691,20 +596,15 @@ export function OwnerMenuPage({ embedded = false }: OwnerMenuPageProps = {}) {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="edit-modifiers-title" className="menu-mgmt-modal__title">
-              Sizes & toppings
+              Types, sizes & toppings
             </h2>
             <p className="muted menu-mgmt-modal__item">{editItem.name}</p>
             <MenuModifierFields
               variations={editVariations}
               setVariations={setEditVariations}
-              addons={editAddons}
-              setAddons={setEditAddons}
+              groups={editGroups}
+              setGroups={setEditGroups}
               variationRadioName="edit-default-var"
-              emptyVariation={emptyVariation}
-              emptyAddon={emptyAddon}
-              onSetDefaultVariation={(idx) =>
-                setDefaultVariation(editVariations, setEditVariations, idx)
-              }
             />
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setEditItem(null)}>

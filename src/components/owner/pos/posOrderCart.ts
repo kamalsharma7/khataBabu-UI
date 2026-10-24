@@ -1,6 +1,6 @@
 import type { MenuItem, PosOrder, PosOrderLine } from "../../../types/owner";
 import { effectiveLineFoodType } from "../menu/menuFoodType";
-import { isModifierAvailable } from "../menu/modifierUtils";
+import { findVariation, isModifierAvailable, variationDisplayName } from "../menu/modifierUtils";
 import { optimisticLineId } from "./posIds";
 import { money } from "./posUtils";
 
@@ -59,7 +59,7 @@ export function optimisticAddLine(
   addonIds: string[],
   quantity: number,
 ): PosOrder {
-  const variation = item.variations?.find((v) => v.id === variationId);
+  const variation = findVariation(item, variationId);
   const unitPrice = variation?.price ?? item.price;
   const addons = (item.addons ?? []).filter(
     (a) => addonIds.includes(a.id) && isModifierAvailable(a.is_available),
@@ -73,7 +73,7 @@ export function optimisticAddLine(
     is_open_item: false,
     menu_item_variation_id: variationId,
     item_name: item.name,
-    variation_name: variation?.name ?? null,
+    variation_name: variationDisplayName(item, variationId),
     quantity,
     unit_price: String(unitPrice),
     addons_total: addonsTotal.toFixed(2),

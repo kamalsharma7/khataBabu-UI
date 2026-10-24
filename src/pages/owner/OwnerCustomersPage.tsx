@@ -23,6 +23,7 @@ import {
 } from "../../components/owner/crm/crmUtils";
 import { useOwnerAuth } from "../../context/OwnerAuthContext";
 import { useOwnerOutlet } from "../../context/OwnerOutletContext";
+import { useOwnerPermissions } from "../../context/OwnerPermissionsContext";
 import type { CrmInsights, CustomerDetail, CustomerSummary, CustomerWrite } from "../../types/owner";
 
 type Tab = "customers" | "insights";
@@ -36,7 +37,8 @@ function csvEscape(v: string | number | null | undefined): string {
 export function OwnerCustomersPage() {
   const { outlet } = useOwnerOutlet();
   const { profile } = useOwnerAuth();
-  const canDelete = (profile?.permissions ?? []).includes("analytics.overview");
+  const { can } = useOwnerPermissions();
+  const canDelete = can("crm.delete");
 
   const [tab, setTab] = useState<Tab>("customers");
   const [qDraft, setQDraft] = useState("");

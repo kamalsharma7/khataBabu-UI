@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   fetchBusinessSettings,
   setManagerPin,
@@ -67,7 +68,10 @@ export function OwnerSettingsPage() {
   return (
     <div className="owner-settings card">
       <h1>Business &amp; invoice settings</h1>
-      <p className="muted">GST details appear on tax invoices. Set manager PIN for discount and refund approvals.</p>
+      <p className="muted">
+        GSTIN is printed on invoices as legal identity. It does not add GST to bills — that is set under{" "}
+        <Link to="/app/tax">Tax</Link>. Set manager PIN for discount and refund approvals.
+      </p>
       {error && <p className="form-error">{error}</p>}
 
       <section className="owner-settings__section">
@@ -92,7 +96,7 @@ export function OwnerSettingsPage() {
             <input value={data.invoice_prefix} onChange={(e) => setData({ ...data, invoice_prefix: e.target.value })} />
           </label>
           <label className="field">
-            <span>GST registered</span>
+            <span>GST registered (invoice identity only)</span>
             <input type="checkbox" checked={data.gst_registered} onChange={(e) => setData({ ...data, gst_registered: e.target.checked })} />
           </label>
         </div>

@@ -1,6 +1,7 @@
 import { getOwnerToken, ownerApiRequest } from "./ownerClient";
 import type {
   FloorStatusResponse,
+  MenuAddonGroupInput,
   MenuAddonInput,
   MenuCategory,
   MenuItem,
@@ -13,6 +14,9 @@ import type {
   PosKot,
   PosOrder,
   SplitBillPreview,
+  TaxPreview,
+  TaxProfile,
+  TaxProfileWrite,
   VenueArea,
   VenueTable,
 } from "../types/owner";
@@ -36,6 +40,7 @@ export interface OwnerProfile {
   must_change_password: boolean;
   role?: string;
   permissions?: string[];
+  can_manage_permissions?: boolean;
   support_contact_name?: string | null;
   support_contact_mobile?: string | null;
 }
@@ -216,6 +221,7 @@ export function createMenuItem(
     sgst_percent?: number;
     variations?: MenuVariationInput[];
     addons?: MenuAddonInput[];
+    addon_groups?: MenuAddonGroupInput[];
   },
 ) {
   return ownerApiRequest<MenuItem>(`/owner/outlets/${outletId}/menu/items`, {
@@ -230,6 +236,7 @@ export function replaceMenuItemModifiers(
   body: {
     variations: MenuVariationInput[];
     addons: MenuAddonInput[];
+    addon_groups?: MenuAddonGroupInput[];
   },
 ) {
   return ownerApiRequest<MenuItem>(`/owner/outlets/${outletId}/menu/items/${itemId}/modifiers`, {
@@ -257,6 +264,10 @@ export interface PosBillingSettings {
   gst_registered: boolean;
   gstin: string | null;
   default_tax_percent: string;
+  tax_enabled?: boolean;
+  default_method?: string;
+  tax_label?: string | null;
+  apply_tax?: boolean;
 }
 
 export function posBillingSettings(outletId: string) {
@@ -418,6 +429,7 @@ export function posSplitBillPreview(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    apply_tax?: boolean;
     round_to_rupee?: boolean;
   },
 ) {
@@ -443,6 +455,7 @@ export function posSaveBill(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    apply_tax?: boolean;
     tip_amount?: number;
     round_to_rupee?: boolean;
     print_after_save?: boolean;
@@ -469,6 +482,7 @@ export function posCreateBill(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    apply_tax?: boolean;
     tip_amount?: number;
     round_to_rupee?: boolean;
   },
@@ -492,6 +506,7 @@ export function posSettleBill(
     discount_amount?: number;
     discount_percent?: number;
     tax_percent?: number;
+    apply_tax?: boolean;
     tip_amount?: number;
     round_to_rupee?: boolean;
     manager_approval_pin?: string;
@@ -782,6 +797,29 @@ export function backfillCustomers(outletId: string) {
   );
 }
 
+export function myOutletPermissions(outletId: string) {
+  return ownerApiRequest<import("../types/owner").MyPermissions>(
+    `/owner/outlets/${outletId}/my-permissions`,
+  );
+}
+
+export function staffPermissionMatrix(outletId: string) {
+  return ownerApiRequest<import("../types/owner").StaffPermissionMatrix>(
+    `/owner/outlets/${outletId}/staff-permissions`,
+  );
+}
+
+export function saveStaffPermissions(
+  outletId: string,
+  staffId: string,
+  body: { grants: Record<string, boolean>; apply_to_all_outlets?: boolean },
+) {
+  return ownerApiRequest<import("../types/owner").StaffPermissionMatrix>(
+    `/owner/outlets/${outletId}/staff-permissions/${staffId}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
 export function replaceRecipeBom(
   outletId: string,
   menuItemId: string,
@@ -932,6 +970,45 @@ export function createBillRefund(
   }>(`/owner/outlets/${outletId}/pos/bills/${billId}/refunds`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export function listTaxProfiles(outletId: string) {
+  return ownerApiRequest<TaxProfile[]>(`/owner/outlets/${outletId}/tax`);
+}
+
+export function createTaxProfile(outletId: string, body: TaxProfileWrite) {
+  return ownerApiRequest<TaxProfile>(`/owner/outlets/${outletId}/tax`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateTaxProfile(outletId: string, profileId: string, body: Partial<TaxProfileWrite>) {
+  return ownerApiRequest<TaxProfile>(`/owner/outlets/${outletId}/tax/${profileId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteTaxProfile(outletId: string, profileId: string) {
+  return ownerApiRequest<void>(`/owner/outlets/${outletId}/tax/${profileId}`, { method: "DELETE" });
+}
+
+export function setTaxEnabled(outletId: string, enabled: boolean) {
+  return ownerApiRequest<TaxProfile[]>(`/owner/outlets/${outletId}/tax/enabled`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function previewTax(
+  outletId: string,
+  body: { amount_inr?: number; order_type?: "dine_in" | "takeaway" | "delivery"; apply_tax?: boolean },
+) {
+  return ownerApiRequest<TaxPreview>(`/owner/outlets/${outletId}/tax/preview`, {
+    method: "POST",
+    body: JSON.stringify({ amount_inr: 100, order_type: "dine_in", apply_tax: true, ...body }),
   });
 }
 

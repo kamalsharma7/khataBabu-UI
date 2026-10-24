@@ -291,9 +291,12 @@ export function PosOrderScreen({
                 <span>{bill ? "Bill total" : "Total"}</span>
                 <strong>{fmt(displayTotal)}</strong>
               </div>
-              {bill && (bill.cgst_amount || bill.sgst_amount) && (
+              {bill && Number(bill.tax_amount) > 0 && (
                 <p className="muted pp-cart-gst-breakup">
-                  CGST {fmt(bill.cgst_amount ?? "0")} · SGST {fmt(bill.sgst_amount ?? "0")}
+                  {bill.tax_label ? `${bill.tax_label} · ` : ""}
+                  {Number(bill.cgst_amount ?? 0) > 0 ? `CGST ${fmt(bill.cgst_amount ?? "0")} · ` : ""}
+                  {Number(bill.sgst_amount ?? 0) > 0 ? `SGST ${fmt(bill.sgst_amount ?? "0")}` : ""}
+                  {Number(bill.igst_amount ?? 0) > 0 ? `IGST ${fmt(bill.igst_amount ?? "0")}` : ""}
                 </p>
               )}
               <div className="pp-cart-actions" aria-label="Order actions">

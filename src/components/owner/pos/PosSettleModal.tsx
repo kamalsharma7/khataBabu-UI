@@ -18,12 +18,13 @@ type Props = {
   busy: boolean;
   discountPercent: string;
   discountAmount: string;
-  taxPercent: string;
+  applyTax: boolean;
+  taxEnabled: boolean;
   tipAmount: string;
   payments: PaymentRow[];
   onDiscountPercent: (v: string) => void;
   onDiscountAmount: (v: string) => void;
-  onTaxPercent: (v: string) => void;
+  onApplyTax: (v: boolean) => void;
   onTipAmount: (v: string) => void;
   onApplyAdjustments: () => void;
   onPaymentsChange: (rows: PaymentRow[]) => void;
@@ -41,12 +42,13 @@ export function PosSettleModal({
   busy,
   discountPercent,
   discountAmount,
-  taxPercent,
+  applyTax,
+  taxEnabled,
   tipAmount,
   payments,
   onDiscountPercent,
   onDiscountAmount,
-  onTaxPercent,
+  onApplyTax,
   onTipAmount,
   onApplyAdjustments,
   onPaymentsChange,
@@ -116,9 +118,14 @@ export function PosSettleModal({
                   onBlur={onApplyAdjustments}
                 />
               </label>
-              <label className="field">
-                <span>Tax %</span>
-                <input value={taxPercent} onChange={(e) => onTaxPercent(e.target.value)} onBlur={onApplyAdjustments} />
+              <label className="field field--checkbox">
+                <span>Apply tax</span>
+                <input
+                  type="checkbox"
+                  checked={applyTax && taxEnabled}
+                  disabled={!taxEnabled}
+                  onChange={(e) => onApplyTax(e.target.checked)}
+                />
               </label>
               <label className="field">
                 <span>Tip ₹</span>
@@ -154,16 +161,26 @@ export function PosSettleModal({
               )}
               {money(bill.tax_amount) > 0 && (
                 <div>
-                  <dt>Tax ({bill.tax_percent}%)</dt>
+                  <dt>{bill.tax_label || `Tax (${bill.tax_percent}%)`}</dt>
                   <dd>{fmt(bill.tax_amount)}</dd>
                 </div>
               )}
-              {(bill.cgst_amount || bill.sgst_amount) && (
+              {money(bill.cgst_amount ?? "0") > 0 && (
                 <div>
-                  <dt>CGST / SGST</dt>
-                  <dd>
-                    {fmt(bill.cgst_amount ?? "0")} / {fmt(bill.sgst_amount ?? "0")}
-                  </dd>
+                  <dt>CGST</dt>
+                  <dd>{fmt(bill.cgst_amount ?? "0")}</dd>
+                </div>
+              )}
+              {money(bill.sgst_amount ?? "0") > 0 && (
+                <div>
+                  <dt>SGST</dt>
+                  <dd>{fmt(bill.sgst_amount ?? "0")}</dd>
+                </div>
+              )}
+              {money(bill.igst_amount ?? "0") > 0 && (
+                <div>
+                  <dt>IGST</dt>
+                  <dd>{fmt(bill.igst_amount ?? "0")}</dd>
                 </div>
               )}
               {money(bill.tip_amount ?? "0") > 0 && (
